@@ -1,4 +1,4 @@
-// components/AuthHeader.tsx - Updated Header with Auth Context
+// components/AuthHeader.tsx - Fixed with Red Working Logout
 import React, { useState } from 'react';
 import {
   View,
@@ -7,6 +7,7 @@ import {
   StyleSheet,
   Alert,
   Modal,
+  ActivityIndicator,
 } from 'react-native';
 import { router } from 'expo-router';
 import GoogleLoginButton from './GoogleLoginButton';
@@ -19,6 +20,7 @@ interface AuthHeaderProps {
 export default function AuthHeader({ style }: AuthHeaderProps) {
   const { user, isLoggedIn, isLoading, login, logout } = useAuth();
   const [showLoginModal, setShowLoginModal] = useState(false);
+  const [loggingOut, setLoggingOut] = useState(false);
 
   const handleGoogleLoginSuccess = async (userData: any, token: string, isNewUser: boolean) => {
     console.log('✅ Google login successful in header:', userData.email);
@@ -53,24 +55,90 @@ export default function AuthHeader({ style }: AuthHeaderProps) {
   };
 
   const handleLogout = () => {
-    Alert.alert(
-      'Logout',
-      'Are you sure you want to logout?',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Logout',
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              await logout();
-            } catch (error) {
-              console.error('Logout error:', error);
-            }
-          },
-        },
-      ]
-    );
+    console.log('🔴🔴🔴 AUTH HEADER LOGOUT: Button clicked!');
+    console.log('🔴🔴🔴 AUTH HEADER LOGOUT: loggingOut state:', loggingOut);
+    
+    if (loggingOut) {
+      console.log('⏳⏳⏳ AUTH HEADER LOGOUT: Already in progress, ignoring...');
+      return;
+    }
+    
+    // Direct logout without Alert dialog (since Alert doesn't work properly)
+    console.log('🔴🔴🔴 AUTH HEADER LOGOUT: Proceeding with logout...');
+    
+    // Add a slight delay to prevent accidental logouts
+    setTimeout(() => {
+      console.log('🔴🔴🔴 AUTH HEADER LOGOUT: Executing logout after delay...');
+      performLogout();
+    }, 100);
+  };
+
+  const performLogout = async () => {
+    console.log('🚪🚪🚪 AUTH HEADER LOGOUT: performLogout called');
+    console.log('🚪🚪🚪 AUTH HEADER LOGOUT: Current loggingOut state:', loggingOut);
+    
+    if (loggingOut) {
+      console.log('⏳⏳⏳ AUTH HEADER LOGOUT: Already logging out, skipping...');
+      return;
+    }
+
+    try {
+      console.log('🚪🚪🚪 AUTH HEADER LOGOUT: Setting loggingOut to true');
+      setLoggingOut(true);
+      console.log('🚪🚪🚪 AUTH HEADER LOGOUT: Starting logout process...');
+      
+      console.log('🧹🧹🧹 AUTH HEADER LOGOUT: Local state cleared');
+      
+      // Perform logout through AuthContext
+      console.log('📡📡📡 AUTH HEADER LOGOUT: Calling logout() from AuthContext');
+      await logout();
+      console.log('✅✅✅ AUTH HEADER LOGOUT: AuthContext logout completed');
+      
+      // Force navigation to home screen
+      console.log('📱📱📱 AUTH HEADER LOGOUT: Navigating to home...');
+      
+      // Use replace to prevent going back
+      router.replace('/(tabs)');
+      
+      // Small delay to ensure navigation completes
+      setTimeout(() => {
+        console.log('🎉🎉🎉 AUTH HEADER LOGOUT: Logout process completed successfully');
+        Alert.alert(
+          'Logged Out',
+          'You have been successfully logged out.',
+          [{ text: 'OK' }]
+        );
+      }, 100);
+      
+    } catch (error) {
+      console.error('❌❌❌ AUTH HEADER LOGOUT: Logout error:', error);
+      console.error('❌❌❌ AUTH HEADER LOGOUT: Error details:', JSON.stringify(error));
+      
+      // Even if logout fails, navigate to home
+      try {
+        console.log('🔄🔄🔄 AUTH HEADER LOGOUT: Force logout - navigating anyway');
+        
+        // Navigate to home
+        router.replace('/(tabs)');
+        
+        Alert.alert(
+          'Session Ended',
+          'Your session has been ended. You may need to refresh the app.',
+          [{ text: 'OK' }]
+        );
+      } catch (navError) {
+        console.error('❌❌❌ AUTH HEADER LOGOUT: Navigation error:', navError);
+        Alert.alert(
+          'Error',
+          'There was an issue logging out. Please refresh the app.',
+          [{ text: 'OK' }]
+        );
+      }
+    } finally {
+      console.log('🏁🏁🏁 AUTH HEADER LOGOUT: Setting loggingOut to false');
+      setLoggingOut(false);
+      console.log('🏁🏁🏁 AUTH HEADER LOGOUT: Logout process finished');
+    }
   };
 
   const handleGoogleLoginError = (error: string) => {
@@ -97,9 +165,7 @@ export default function AuthHeader({ style }: AuthHeaderProps) {
           </View>
         </View>
         <View style={styles.rightSection}>
-          <View style={styles.notificationButton}>
-            <Text style={styles.notificationIcon}>🔔</Text>
-          </View>
+          {/* Removed notification button */}
         </View>
       </View>
     );
@@ -144,8 +210,19 @@ export default function AuthHeader({ style }: AuthHeaderProps) {
                   {user.role === 'vendor' ? 'Business' : 'Gamer'}
                 </Text>
               </View>
-              <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
-                <Text style={styles.logoutButtonText}>Logout</Text>
+              <TouchableOpacity 
+                style={[styles.logoutButton, loggingOut && styles.logoutButtonDisabled]} 
+                onPress={() => {
+                  console.log('🔴🔴🔴 AUTH HEADER LOGOUT: Logout button pressed!');
+                  handleLogout();
+                }}
+                disabled={loggingOut}
+              >
+                {loggingOut ? (
+                  <ActivityIndicator size="small" color="#6b7280" />
+                ) : (
+                  <Text style={styles.logoutButtonText}>Logout</Text>
+                )}
               </TouchableOpacity>
             </>
           ) : (
@@ -154,10 +231,7 @@ export default function AuthHeader({ style }: AuthHeaderProps) {
             </TouchableOpacity>
           )}
           
-          {/* Notification bell */}
-          <TouchableOpacity style={styles.notificationButton}>
-            <Text style={styles.notificationIcon}>🔔</Text>
-          </TouchableOpacity>
+          {/* Removed notification bell */}
         </View>
       </View>
 
@@ -352,22 +426,17 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     paddingHorizontal: 12,
     paddingVertical: 6,
+    minWidth: 60,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  logoutButtonDisabled: {
+    opacity: 0.5,
   },
   logoutButtonText: {
     color: '#6b7280',
     fontSize: 12,
     fontWeight: '500',
-  },
-  notificationButton: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: '#f9fafb',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  notificationIcon: {
-    fontSize: 16,
   },
 
   // Modal styles

@@ -5,7 +5,7 @@
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
-    "scheme": "gamezonemobile",
+    "scheme": "com.wintech.gamezone",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "splash": {
@@ -15,15 +15,36 @@
     },
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.yourcompany.gamezonemobile"
+      "bundleIdentifier": "com.wintech.gamezone",
+      "infoPlist": {
+        "CFBundleURLTypes": [
+          {
+            "CFBundleURLName": "google-oauth",
+            "CFBundleURLSchemes": [
+              "com.googleusercontent.apps.17592191618-bk9uucidcr52cusl1mqagta10e47k5fr"
+            ]
+          }
+        ]
+      }
     },
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/adaptive-icon.png",
         "backgroundColor": "#ffffff"
       },
-      "package": "com.yourcompany.gamezonemobile",
-      "edgeToEdgeEnabled": true
+      "package": "com.wintech.gamezone",
+      "edgeToEdgeEnabled": true,
+      "intentFilters": [
+        {
+          "action": "VIEW",
+          "category": ["DEFAULT", "BROWSABLE"],
+          "data": [
+            {
+              "scheme": "com.wintech.gamezone"
+            }
+          ]
+        }
+      ]
     },
     "web": {
       "bundler": "metro",

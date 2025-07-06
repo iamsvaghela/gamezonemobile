@@ -1,4 +1,4 @@
-// app/(tabs)/profile.tsx - Fixed Profile Screen with Enhanced Logout
+// app/(tabs)/profile.tsx - Simplified Profile Screen
 import React, { useState, useEffect } from 'react';
 import {
   View,
@@ -18,156 +18,10 @@ import { router } from 'expo-router';
 import { useAuth } from '../../contexts/AuthContext';
 import apiService from '../../services/api';
 
-interface Booking {
-  _id: string;
-  reference: string;
-  zoneId: {
-    _id: string;
-    name: string;
-    location: {
-      city: string;
-    };
-  };
-  date: string;
-  timeSlot: string;
-  duration: number;
-  totalAmount: number;
-  status: 'pending' | 'confirmed' | 'completed' | 'cancelled';
-  paymentStatus: 'pending' | 'paid' | 'refunded' | 'failed';
-  createdAt: string;
-}
-
-interface BookingStats {
-  total: number;
-  confirmed: number;
-  completed: number;
-  cancelled: number;
-  pending: number;
-  totalSpent: number;
-}
-
 export default function ProfileScreen() {
-  const { user, isLoggedIn, isLoading, login, logout, updateUser, refreshUserData, isTokenValid } = useAuth();
-  const [bookings, setBookings] = useState<Booking[]>([]);
-  const [bookingStats, setBookingStats] = useState<BookingStats | null>(null);
-  const [bookingsLoading, setBookingsLoading] = useState(false);
+  const { user, isLoggedIn, isLoading, login, logout, refreshUserData } = useAuth();
   const [refreshing, setRefreshing] = useState(false);
   const [loggingOut, setLoggingOut] = useState(false);
-  
-  // Modal states
-  const [changePasswordModal, setChangePasswordModal] = useState(false);
-  const [editProfileModal, setEditProfileModal] = useState(false);
-  
-  // Form states
-  const [currentPassword, setCurrentPassword] = useState('');
-  const [newPassword, setNewPassword] = useState('');
-  const [confirmPassword, setConfirmPassword] = useState('');
-  const [editedName, setEditedName] = useState('');
-  const [editedPhone, setEditedPhone] = useState('');
-  
-  // Loading states
-  const [passwordChanging, setPasswordChanging] = useState(false);
-  const [profileUpdating, setProfileUpdating] = useState(false);
-  const [checkingToken, setCheckingToken] = useState(false);
-
-  useEffect(() => {
-    if (isLoggedIn && user) {
-      setEditedName(user.name || '');
-      setEditedPhone(user.phone || '');
-      loadBookingData();
-    }
-  }, [isLoggedIn, user]);
-
-  const loadBookingData = async () => {
-    if (!isLoggedIn) return;
-    
-    try {
-      setBookingsLoading(true);
-      console.log('📅 Loading user bookings...');
-      
-      const response = await apiService.getUserBookings({ limit: 10 });
-      
-      if (response.success && response.bookings) {
-        setBookings(response.bookings);
-        
-        // Calculate stats
-        const stats: BookingStats = {
-          total: response.bookings.length,
-          confirmed: response.bookings.filter(b => b.status === 'confirmed').length,
-          completed: response.bookings.filter(b => b.status === 'completed').length,
-          cancelled: response.bookings.filter(b => b.status === 'cancelled').length,
-          pending: response.bookings.filter(b => b.status === 'pending').length,
-          totalSpent: response.bookings
-            .filter(b => b.status !== 'cancelled')
-            .reduce((sum, b) => sum + (b.totalAmount || 0), 0)
-        };
-        
-        setBookingStats(stats);
-        console.log('✅ Bookings loaded successfully:', stats);
-      } else {
-        console.log('⚠️ No bookings found or API response failed');
-        setBookings([]);
-        setBookingStats({
-          total: 0,
-          confirmed: 0,
-          completed: 0,
-          cancelled: 0,
-          pending: 0,
-          totalSpent: 0
-        });
-      }
-    } catch (error) {
-      console.error('❌ Error loading bookings:', error);
-      
-      // Fallback to mock data for demo
-      const mockBookings: Booking[] = [
-        {
-          _id: '1',
-          reference: 'GZ123456',
-          zoneId: {
-            _id: 'zone1',
-            name: 'Elite Gaming Lounge',
-            location: { city: 'New York' }
-          },
-          date: new Date().toISOString().split('T')[0],
-          timeSlot: '14:00',
-          duration: 2,
-          totalAmount: 70,
-          status: 'confirmed',
-          paymentStatus: 'paid',
-          createdAt: new Date().toISOString(),
-        },
-        {
-          _id: '2',
-          reference: 'GZ123457',
-          zoneId: {
-            _id: 'zone2',
-            name: 'Pixel Paradise',
-            location: { city: 'Los Angeles' }
-          },
-          date: new Date(Date.now() - 86400000).toISOString().split('T')[0],
-          timeSlot: '16:00',
-          duration: 3,
-          totalAmount: 90,
-          status: 'completed',
-          paymentStatus: 'paid',
-          createdAt: new Date(Date.now() - 86400000).toISOString(),
-        },
-      ];
-      
-      setBookings(mockBookings);
-      setBookingStats({
-        total: 2,
-        confirmed: 1,
-        completed: 1,
-        cancelled: 0,
-        pending: 0,
-        totalSpent: 160
-      });
-    } finally {
-      setBookingsLoading(false);
-    }
-  };
 
   const handleGoogleLogin = async () => {
     try {
@@ -203,25 +57,14 @@ export default function ProfileScreen() {
       return;
     }
     
-    Alert.alert(
-      'Logout',
-      'Are you sure you want to logout?',
-      [
-        { 
-          text: 'Cancel', 
-          style: 'cancel',
-          onPress: () => console.log('🔥 Logout cancelled')
-        },
-        {
-          text: 'Logout',
-          style: 'destructive',
-          onPress: () => {
-            console.log('🔥 User confirmed logout');
-            performLogout();
-          },
-        },
-      ]
-    );
+    // Direct logout without Alert dialog (since Alert doesn't work properly)
+    console.log('🔥 Proceeding with logout...');
+    
+    // Add a slight delay to prevent accidental logouts
+    setTimeout(() => {
+      console.log('🔥 Executing logout after delay...');
+      performLogout();
+    }, 100);
   };
 
   const performLogout = async () => {
@@ -234,18 +77,7 @@ export default function ProfileScreen() {
       setLoggingOut(true);
       console.log('🚪 Starting logout process...');
       
-      // Clear any local state first
-      setBookings([]);
-      setBookingStats(null);
-      setCurrentPassword('');
-      setNewPassword('');
-      setConfirmPassword('');
-      setEditedName('');
-      setEditedPhone('');
-      
       // Close any open modals
-      setChangePasswordModal(false);
-      setEditProfileModal(false);
       
       console.log('🧹 Local state cleared');
       
@@ -276,15 +108,9 @@ export default function ProfileScreen() {
       try {
         console.log('🔄 Force logout - clearing state anyway');
         
-        // Clear bookings and forms
-        setBookings([]);
-        setBookingStats(null);
-        setCurrentPassword('');
-        setNewPassword('');
-        setConfirmPassword('');
+        // Clear forms
         setEditedName('');
         setEditedPhone('');
-        setChangePasswordModal(false);
         setEditProfileModal(false);
         
         // Navigate to home
@@ -315,7 +141,6 @@ export default function ProfileScreen() {
     try {
       console.log('🔄 Refreshing profile data...');
       await refreshUserData();
-      await loadBookingData();
       console.log('✅ Profile data refreshed');
     } catch (error) {
       console.error('❌ Error refreshing profile:', error);
@@ -325,104 +150,9 @@ export default function ProfileScreen() {
     }
   };
 
-  const handleCheckTokenValidity = async () => {
-    try {
-      setCheckingToken(true);
-      const isValid = await isTokenValid();
-      Alert.alert(
-        'Session Status',
-        isValid ? 
-          '✅ Your session is valid and active.' : 
-          '❌ Your session has expired. Please login again.',
-        [
-          { text: 'OK' },
-          ...(isValid ? [] : [{ text: 'Login', onPress: handleGoogleLogin }])
-        ]
-      );
-    } catch (error) {
-      console.error('❌ Error checking token:', error);
-      Alert.alert('Error', 'Failed to check session status');
-    } finally {
-      setCheckingToken(false);
-    }
-  };
-
-  const handleChangePassword = async () => {
-    if (!currentPassword || !newPassword || !confirmPassword) {
-      Alert.alert('Error', 'Please fill in all password fields');
-      return;
-    }
-
-    if (newPassword !== confirmPassword) {
-      Alert.alert('Error', 'New passwords do not match');
-      return;
-    }
-
-    if (newPassword.length < 6) {
-      Alert.alert('Error', 'New password must be at least 6 characters');
-      return;
-    }
-
-    try {
-      setPasswordChanging(true);
-      
-      // Use API service to change password
-      await apiService.changePassword(currentPassword, newPassword);
-      
-      Alert.alert('Success', 'Password changed successfully');
-      setChangePasswordModal(false);
-      setCurrentPassword('');
-      setNewPassword('');
-      setConfirmPassword('');
-    } catch (error) {
-      console.error('❌ Password change error:', error);
-      Alert.alert('Error', 'Failed to change password. Please check your current password and try again.');
-    } finally {
-      setPasswordChanging(false);
-    }
-  };
-
-  const handleUpdateProfile = async () => {
-    if (!editedName.trim()) {
-      Alert.alert('Error', 'Name cannot be empty');
-      return;
-    }
-
-    try {
-      setProfileUpdating(true);
-      
-      // Use the enhanced updateUser from AuthContext
-      await updateUser({
-        name: editedName.trim(),
-        phone: editedPhone.trim(),
-      });
-      
-      Alert.alert('Success', 'Profile updated successfully');
-      setEditProfileModal(false);
-    } catch (error) {
-      console.error('❌ Profile update error:', error);
-      Alert.alert('Error', 'Failed to update profile. Please try again.');
-    } finally {
-      setProfileUpdating(false);
-    }
-  };
-
   const handleSupport = () => {
-    Alert.alert(
-      'Support',
-      'How would you like to get support?',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Email Support',
-          onPress: () => Linking.openURL('mailto:support@gamezone.com?subject=GameZone Support Request'),
-        },
-        {
-          text: 'Call Support',
-          onPress: () => Linking.openURL('tel:+1234567890'),
-        },
-      ]
-    );
+    // Direct email opening without popup
+    Linking.openURL('mailto:support@gamezone.com?subject=GameZone Support Request&body=Hi GameZone Support Team,%0D%0A%0D%0AI need help with:%0D%0A%0D%0A[Please describe your issue here]%0D%0A%0D%0AThank you!');
   };
 
   const formatDate = (dateString: string) => {
@@ -431,29 +161,6 @@ export default function ProfileScreen() {
       month: 'short',
       day: 'numeric',
     });
-  };
-
-  const formatTime = (timeString: string) => {
-    const [hours, minutes] = timeString.split(':');
-    const hour = parseInt(hours);
-    const ampm = hour >= 12 ? 'PM' : 'AM';
-    const displayHour = hour % 12 || 12;
-    return `${displayHour}:${minutes} ${ampm}`;
-  };
-
-  const getStatusColor = (status: string) => {
-    switch (status.toLowerCase()) {
-      case 'confirmed':
-        return '#10b981';
-      case 'pending':
-        return '#f59e0b';
-      case 'completed':
-        return '#6366f1';
-      case 'cancelled':
-        return '#ef4444';
-      default:
-        return '#6b7280';
-    }
   };
 
   if (isLoading) {
@@ -584,77 +291,10 @@ export default function ProfileScreen() {
               </Text>
             )}
           </View>
-          
-          <TouchableOpacity
-            style={styles.editButton}
-            onPress={() => setEditProfileModal(true)}
-          >
-            <Text style={styles.editButtonText}>✏️</Text>
-          </TouchableOpacity>
         </View>
-
-        {/* Booking Stats */}
-        {bookingStats && (
-          <View style={styles.statsCard}>
-            <Text style={styles.statsTitle}>Your Gaming Stats</Text>
-            <View style={styles.statsGrid}>
-              <View style={styles.statItem}>
-                <Text style={styles.statNumber}>{bookingStats.total}</Text>
-                <Text style={styles.statLabel}>Total Bookings</Text>
-              </View>
-              <View style={styles.statItem}>
-                <Text style={styles.statNumber}>{bookingStats.confirmed}</Text>
-                <Text style={styles.statLabel}>Confirmed</Text>
-              </View>
-              <View style={styles.statItem}>
-                <Text style={styles.statNumber}>{bookingStats.completed}</Text>
-                <Text style={styles.statLabel}>Completed</Text>
-              </View>
-              <View style={styles.statItem}>
-                <Text style={styles.statNumber}>${bookingStats.totalSpent}</Text>
-                <Text style={styles.statLabel}>Total Spent</Text>
-              </View>
-            </View>
-          </View>
-        )}
 
         {/* Menu Options */}
         <View style={styles.menuSection}>
-          {/* Session Status */}
-          <TouchableOpacity
-            style={styles.menuItem}
-            onPress={handleCheckTokenValidity}
-            disabled={checkingToken}
-          >
-            <View style={styles.menuItemContent}>
-              <Text style={styles.menuIcon}>🔒</Text>
-              <View style={styles.menuTextContainer}>
-                <Text style={styles.menuTitle}>Check Session Status</Text>
-                <Text style={styles.menuSubtitle}>Verify your login session</Text>
-              </View>
-              {checkingToken ? (
-                <ActivityIndicator size="small" color="#6366f1" />
-              ) : (
-                <Text style={styles.menuArrow}>›</Text>
-              )}
-            </View>
-          </TouchableOpacity>
-
-          {/* Change Password */}
-          <TouchableOpacity
-            style={styles.menuItem}
-            onPress={() => setChangePasswordModal(true)}
-          >
-            <View style={styles.menuItemContent}>
-              <Text style={styles.menuIcon}>🔐</Text>
-              <View style={styles.menuTextContainer}>
-                <Text style={styles.menuTitle}>Change Password</Text>
-                <Text style={styles.menuSubtitle}>Update your account password</Text>
-              </View>
-              <Text style={styles.menuArrow}>›</Text>
-            </View>
-          </TouchableOpacity>
-
           {/* Booking History */}
           <TouchableOpacity
             style={styles.menuItem}
@@ -709,168 +349,7 @@ export default function ProfileScreen() {
             </View>
           </TouchableOpacity>
         </View>
-
-        {/* Recent Bookings Preview */}
-        <View style={styles.bookingsSection}>
-          <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>Recent Bookings</Text>
-            <TouchableOpacity onPress={() => router.push('/(tabs)/bookings')}>
-              <Text style={styles.viewAllText}>View All</Text>
-            </TouchableOpacity>
-          </View>
-
-          {bookingsLoading ? (
-            <View style={styles.bookingsLoading}>
-              <ActivityIndicator color="#6366f1" />
-              <Text style={styles.loadingText}>Loading bookings...</Text>
-            </View>
-          ) : bookings.length > 0 ? (
-            <View style={styles.bookingsList}>
-              {bookings.slice(0, 3).map((booking) => (
-                <View key={booking._id} style={styles.bookingCard}>
-                  <View style={styles.bookingHeader}>
-                    <Text style={styles.bookingReference}>#{booking.reference}</Text>
-                    <View
-                      style={[
-                        styles.statusBadge,
-                        { backgroundColor: getStatusColor(booking.status) },
-                      ]}
-                    >
-                      <Text style={styles.statusText}>{booking.status}</Text>
-                    </View>
-                  </View>
-                  <Text style={styles.bookingZone}>
-                    🎮 {booking.zoneId?.name || 'Gaming Zone'} - {booking.zoneId?.location?.city || 'Unknown'}
-                  </Text>
-                  <Text style={styles.bookingDate}>
-                    📅 {formatDate(booking.date)} at {formatTime(booking.timeSlot)}
-                  </Text>
-                  <Text style={styles.bookingAmount}>💰 ${booking.totalAmount} ({booking.duration}h)</Text>
-                </View>
-              ))}
-            </View>
-          ) : (
-            <View style={styles.noBookings}>
-              <Text style={styles.noBookingsText}>No bookings yet</Text>
-              <TouchableOpacity
-                style={styles.browseButton}
-                onPress={() => router.push('/(tabs)/gamezones')}
-              >
-                <Text style={styles.browseButtonText}>Browse Gaming Zones</Text>
-              </TouchableOpacity>
-            </View>
-          )}
-        </View>
       </ScrollView>
-
-      {/* Change Password Modal */}
-      <Modal
-        visible={changePasswordModal}
-        transparent
-        animationType="slide"
-        onRequestClose={() => setChangePasswordModal(false)}
-      >
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <Text style={styles.modalTitle}>Change Password</Text>
-            
-            <TextInput
-              style={styles.modalInput}
-              placeholder="Current Password"
-              secureTextEntry
-              value={currentPassword}
-              onChangeText={setCurrentPassword}
-            />
-            
-            <TextInput
-              style={styles.modalInput}
-              placeholder="New Password"
-              secureTextEntry
-              value={newPassword}
-              onChangeText={setNewPassword}
-            />
-            
-            <TextInput
-              style={styles.modalInput}
-              placeholder="Confirm New Password"
-              secureTextEntry
-              value={confirmPassword}
-              onChangeText={setConfirmPassword}
-            />
-            
-            <View style={styles.modalButtons}>
-              <TouchableOpacity
-                style={styles.cancelButton}
-                onPress={() => setChangePasswordModal(false)}
-              >
-                <Text style={styles.cancelButtonText}>Cancel</Text>
-              </TouchableOpacity>
-              
-              <TouchableOpacity
-                style={styles.saveButton}
-                onPress={handleChangePassword}
-                disabled={passwordChanging}
-              >
-                {passwordChanging ? (
-                  <ActivityIndicator color="#ffffff" size="small" />
-                ) : (
-                  <Text style={styles.saveButtonText}>Update</Text>
-                )}
-              </TouchableOpacity>
-            </View>
-          </View>
-        </View>
-      </Modal>
-
-      {/* Edit Profile Modal */}
-      <Modal
-        visible={editProfileModal}
-        transparent
-        animationType="slide"
-        onRequestClose={() => setEditProfileModal(false)}
-      >
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <Text style={styles.modalTitle}>Edit Profile</Text>
-            
-            <TextInput
-              style={styles.modalInput}
-              placeholder="Full Name"
-              value={editedName}
-              onChangeText={setEditedName}
-            />
-            
-            <TextInput
-              style={styles.modalInput}
-              placeholder="Phone Number (Optional)"
-              value={editedPhone}
-              onChangeText={setEditedPhone}
-              keyboardType="phone-pad"
-            />
-            
-            <View style={styles.modalButtons}>
-              <TouchableOpacity
-                style={styles.cancelButton}
-                onPress={() => setEditProfileModal(false)}
-              >
-                <Text style={styles.cancelButtonText}>Cancel</Text>
-              </TouchableOpacity>
-              
-              <TouchableOpacity
-                style={styles.saveButton}
-                onPress={handleUpdateProfile}
-                disabled={profileUpdating}
-              >
-                {profileUpdating ? (
-                  <ActivityIndicator color="#ffffff" size="small" />
-                ) : (
-                  <Text style={styles.saveButtonText}>Save</Text>
-                )}
-              </TouchableOpacity>
-            </View>
-          </View>
-        </View>
-      </Modal>
     </>
   );
 }
@@ -1118,53 +597,6 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: '#9ca3af',
   },
-  editButton: {
-    backgroundColor: '#f9fafb',
-    borderRadius: 8,
-    padding: 8,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  editButtonText: {
-    fontSize: 16,
-  },
-  statsCard: {
-    backgroundColor: '#ffffff',
-    marginHorizontal: 20,
-    marginBottom: 20,
-    borderRadius: 16,
-    padding: 20,
-    elevation: 2,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-  },
-  statsTitle: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#1f2937',
-    marginBottom: 16,
-  },
-  statsGrid: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-  },
-  statItem: {
-    alignItems: 'center',
-    flex: 1,
-  },
-  statNumber: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: '#6366f1',
-  },
-  statLabel: {
-    fontSize: 12,
-    color: '#6b7280',
-    marginTop: 4,
-    textAlign: 'center',
-  },
   menuSection: {
     backgroundColor: '#ffffff',
     marginHorizontal: 20,
@@ -1213,165 +645,5 @@ const styles = StyleSheet.create({
   },
   logoutText: {
     color: '#ef4444',
-  },
-  bookingsSection: {
-    marginHorizontal: 20,
-    marginBottom: 20,
-  },
-  sectionHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 12,
-  },
-  sectionTitle: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: '#1f2937',
-  },
-  viewAllText: {
-    fontSize: 14,
-    color: '#6366f1',
-    fontWeight: '500',
-  },
-  bookingsLoading: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: 20,
-    backgroundColor: '#ffffff',
-    borderRadius: 12,
-  },
-  bookingsList: {
-    gap: 12,
-  },
-  bookingCard: {
-    backgroundColor: '#ffffff',
-    borderRadius: 12,
-    padding: 16,
-    elevation: 1,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 2,
-  },
-  bookingHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 8,
-  },
-  bookingReference: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#1f2937',
-  },
-  statusBadge: {
-    borderRadius: 12,
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-  },
-  statusText: {
-    fontSize: 11,
-    fontWeight: '500',
-    color: '#ffffff',
-    textTransform: 'capitalize',
-  },
-  bookingZone: {
-    fontSize: 13,
-    color: '#374151',
-    marginBottom: 4,
-    fontWeight: '500',
-  },
-  bookingDate: {
-    fontSize: 13,
-    color: '#6b7280',
-    marginBottom: 4,
-  },
-  bookingAmount: {
-    fontSize: 13,
-    color: '#059669',
-    fontWeight: '500',
-  },
-  noBookings: {
-    backgroundColor: '#ffffff',
-    borderRadius: 12,
-    padding: 20,
-    alignItems: 'center',
-  },
-  noBookingsText: {
-    fontSize: 14,
-    color: '#6b7280',
-    marginBottom: 12,
-  },
-  browseButton: {
-    backgroundColor: '#6366f1',
-    borderRadius: 8,
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-  },
-  browseButtonText: {
-    color: '#ffffff',
-    fontSize: 12,
-    fontWeight: '500',
-  },
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: 20,
-  },
-  modalContent: {
-    backgroundColor: '#ffffff',
-    borderRadius: 16,
-    padding: 20,
-    width: '100%',
-    maxWidth: 400,
-  },
-  modalTitle: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: '#1f2937',
-    marginBottom: 20,
-    textAlign: 'center',
-  },
-  modalInput: {
-    borderWidth: 1,
-    borderColor: '#d1d5db',
-    borderRadius: 8,
-    padding: 12,
-    fontSize: 16,
-    marginBottom: 16,
-    backgroundColor: '#f9fafb',
-  },
-  modalButtons: {
-    flexDirection: 'row',
-    gap: 12,
-    marginTop: 8,
-  },
-  cancelButton: {
-    flex: 1,
-    backgroundColor: '#f3f4f6',
-    borderRadius: 8,
-    padding: 12,
-    alignItems: 'center',
-  },
-  cancelButtonText: {
-    color: '#6b7280',
-    fontSize: 14,
-    fontWeight: '500',
-  },
-  saveButton: {
-    flex: 1,
-    backgroundColor: '#6366f1',
-    borderRadius: 8,
-    padding: 12,
-    alignItems: 'center',
-  },
-  saveButtonText: {
-    color: '#ffffff',
-    fontSize: 14,
-    fontWeight: '500',
   },
 });
