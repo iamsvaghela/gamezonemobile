@@ -1,4 +1,4 @@
-// app/booking/[id].tsx
+// app/booking/[id].tsx - Fixed version using apiService
 import React, { useState, useEffect } from 'react';
 import {
   View,
@@ -15,12 +15,23 @@ import { Ionicons } from '@expo/vector-icons';
 interface GameZone {
   _id: string;
   name: string;
+  description: string;
   pricePerHour: number;
+  rating: number;
+  totalReviews: number;
+  images: string[];
+  location: {
+    address: string;
+    city: string;
+    state: string;
+  };
   operatingHours: {
     start: string;
     end: string;
   };
   capacity: number;
+  amenities: string[];
+  isActive: boolean;
 }
 
 export default function BookingFormScreen() {
@@ -35,32 +46,97 @@ export default function BookingFormScreen() {
   useEffect(() => {
     if (id) {
       loadZoneDetails();
-      generateTimeSlots();
     }
   }, [id]);
+
+  // Generate time slots after zone details are loaded
+  useEffect(() => {
+    if (zone) {
+      generateTimeSlots();
+    }
+  }, [zone]);
 
   const loadZoneDetails = async () => {
     try {
       setLoading(true);
-      const response = await fetch(`https://gamezone-production.up.railway.app/api/gamezones/${id}`);
-      const data = await response.json();
+      console.log('🔄 Loading zone details for ID:', id);
       
-      // Handle response format - try different ways to access the zone data
-      let zoneData = null;
-      if (data.gamezone) {
-        zoneData = data.gamezone;
-      } else if (data._id) {
-        zoneData = data;
-      } else if (Array.isArray(data) && data.length > 0) {
-        zoneData = data[0];
+      // Use direct fetch since it works consistently
+      const response = await fetch(`https://gamezone-production.up.railway.app/api/gamezones/${id}`);
+      
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
       }
       
-      setZone(zoneData);
+      const data = await response.json();
+      console.log('📱 Direct fetch response:', data);
+      
+      // Handle different response formats
+      let gameZone = null;
+      
+      if (data.gamezone) {
+        // Format: { success: true, gamezone: {...} }
+        gameZone = data.gamezone;
+      } else if (data._id) {
+        // Direct gamezone object
+        gameZone = data;
+      } else if (data.success && data.data) {
+        // Format: { success: true, data: {...} }
+        gameZone = data.data;
+      } else {
+        // Try to find the zone in any property
+        for (const key in data) {
+          if (data[key] && typeof data[key] === 'object' && data[key]._id) {
+            gameZone = data[key];
+            break;
+          }
+        }
+      }
+      
+      if (!gameZone) {
+        throw new Error('Zone not found in response');
+      }
+      
+      // Ensure required fields exist
+      const formattedZone = {
+        _id: gameZone._id,
+        name: gameZone.name || 'Unknown Zone',
+        description: gameZone.description || '',
+        pricePerHour: gameZone.pricePerHour || 0,
+        rating: gameZone.rating || 0,
+        totalReviews: gameZone.totalReviews || 0,
+        images: gameZone.images || [],
+        location: gameZone.location || {
+          address: '',
+          city: '',
+          state: ''
+        },
+        operatingHours: gameZone.operatingHours || {
+          start: '09:00',
+          end: '22:00'
+        },
+        capacity: gameZone.capacity || 1,
+        amenities: gameZone.amenities || [],
+        isActive: gameZone.isActive !== false
+      };
+      
+      setZone(formattedZone);
+      console.log('✅ Zone details loaded:', formattedZone.name);
+      
     } catch (error) {
-      console.error('Load zone details error:', error);
-      Alert.alert('Error', 'Failed to load zone details', [
-        { text: 'Go Back', onPress: () => router.back() }
-      ]);
+      console.error('❌ Load zone details error:', error);
+      
+      // Show user-friendly error message
+      const errorMessage = error instanceof Error ? error.message : 'Failed to load zone details';
+      
+      Alert.alert(
+        'Error Loading Zone',
+        errorMessage,
+        [
+          { text: 'Try Again', onPress: () => loadZoneDetails() },
+          { text: 'Go Back', onPress: () => router.back() }
+        ]
+      );
     } finally {
       setLoading(false);
     }
@@ -68,12 +144,34 @@ export default function BookingFormScreen() {
 
   const generateTimeSlots = () => {
     const slots = [];
-    for (let hour = 9; hour <= 22; hour++) {
-      slots.push(`${hour.toString().padStart(2, '0')}:00`);
-      if (hour < 22) {
-        slots.push(`${hour.toString().padStart(2, '0')}:30`);
+    
+    if (zone && zone.operatingHours) {
+      // Use actual zone operating hours
+      const startHour = parseInt(zone.operatingHours.start.split(':')[0]);
+      const endHour = parseInt(zone.operatingHours.end.split(':')[0]);
+      
+      console.log(`🕐 Generating time slots from ${zone.operatingHours.start} to ${zone.operatingHours.end}`);
+      console.log(`🕐 Start hour: ${startHour}, End hour: ${endHour}`);
+      
+      for (let hour = startHour; hour < endHour; hour++) {
+        slots.push(`${hour.toString().padStart(2, '0')}:00`);
+        // Add 30-minute slot if not the last hour
+        if (hour < endHour - 1) {
+          slots.push(`${hour.toString().padStart(2, '0')}:30`);
+        }
+      }
+    } else {
+      // Fallback to default hours if zone operating hours not available
+      console.log('⚠️ Using fallback operating hours (9 AM - 10 PM)');
+      for (let hour = 9; hour <= 22; hour++) {
+        slots.push(`${hour.toString().padStart(2, '0')}:00`);
+        if (hour < 22) {
+          slots.push(`${hour.toString().padStart(2, '0')}:30`);
+        }
       }
     }
+    
+    console.log(`🕐 Generated ${slots.length} time slots:`, slots);
     setAvailableSlots(slots);
   };
 
@@ -101,15 +199,48 @@ export default function BookingFormScreen() {
       return;
     }
 
+    if (!zone) {
+      Alert.alert('Error', 'Zone information not available');
+      return;
+    }
+
+    // Validate that selected time is within operating hours
+    const selectedHour = parseInt(selectedTime.split(':')[0]);
+    const selectedMinutes = parseInt(selectedTime.split(':')[1]);
+    const startHour = parseInt(zone.operatingHours.start.split(':')[0]);
+    const endHour = parseInt(zone.operatingHours.end.split(':')[0]);
+    const bookingEndHour = selectedHour + duration;
+    
+    console.log('⏰ Booking validation:', {
+      selectedTime,
+      selectedHour,
+      duration,
+      bookingEndHour,
+      operatingHours: zone.operatingHours,
+      startHour,
+      endHour
+    });
+    
+    if (selectedHour < startHour || bookingEndHour > endHour) {
+      Alert.alert(
+        'Invalid Time Selection',
+        `Please select a time within operating hours (${zone.operatingHours.start} - ${zone.operatingHours.end}). Your booking of ${duration} hour(s) starting at ${selectedTime} would end at ${bookingEndHour}:00.`,
+        [{ text: 'OK' }]
+      );
+      return;
+    }
+
     const bookingData = {
       zoneId: id,
-      zoneName: zone?.name || '',
+      zoneName: zone.name,
       date: selectedDate.toISOString().split('T')[0],
       timeSlot: selectedTime,
       duration: duration,
       totalAmount: calculateTotal(),
-      pricePerHour: zone?.pricePerHour || 0,
+      pricePerHour: zone.pricePerHour,
     };
+
+    console.log('📅 Booking data:', bookingData);
 
     // Navigate to payment screen
     router.push({
@@ -158,10 +289,19 @@ export default function BookingFormScreen() {
   if (!zone) {
     return (
       <View style={styles.errorContainer}>
-        <Text style={styles.errorText}>Zone not found</Text>
-        <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
-          <Text style={styles.backButtonText}>Go Back</Text>
-        </TouchableOpacity>
+        <Text style={styles.errorIcon}>⚠️</Text>
+        <Text style={styles.errorTitle}>Zone Not Found</Text>
+        <Text style={styles.errorText}>
+          The gaming zone you're looking for is not available or may have been removed.
+        </Text>
+        <View style={styles.errorActions}>
+          <TouchableOpacity style={styles.retryButton} onPress={() => loadZoneDetails()}>
+            <Text style={styles.retryButtonText}>Try Again</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
+            <Text style={styles.backButtonText}>Go Back</Text>
+          </TouchableOpacity>
+        </View>
       </View>
     );
   }
@@ -170,8 +310,23 @@ export default function BookingFormScreen() {
     <ScrollView style={styles.container}>
       {/* Zone Info Header */}
       <View style={styles.zoneHeader}>
+        <TouchableOpacity 
+          style={styles.backIcon}
+          onPress={() => router.back()}
+        >
+          <Ionicons name="arrow-back" size={24} color="white" />
+        </TouchableOpacity>
         <Text style={styles.zoneName}>{zone.name}</Text>
         <Text style={styles.zonePrice}>${zone.pricePerHour}/hour</Text>
+        {zone.description && (
+          <Text style={styles.zoneDescription}>{zone.description}</Text>
+        )}
+        <View style={styles.operatingHours}>
+          <Ionicons name="time" size={16} color="white" />
+          <Text style={styles.operatingHoursText}>
+            Open: {zone.operatingHours.start} - {zone.operatingHours.end}
+          </Text>
+        </View>
       </View>
 
       {/* Date Selection */}
@@ -274,6 +429,10 @@ export default function BookingFormScreen() {
         <Text style={styles.sectionTitle}>📋 Booking Summary</Text>
         <View style={styles.summaryContainer}>
           <View style={styles.summaryRow}>
+            <Text style={styles.summaryLabel}>Zone:</Text>
+            <Text style={styles.summaryValue}>{zone.name}</Text>
+          </View>
+          <View style={styles.summaryRow}>
             <Text style={styles.summaryLabel}>Date:</Text>
             <Text style={styles.summaryValue}>{formatDate(selectedDate)}</Text>
           </View>
@@ -335,14 +494,43 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     padding: 40,
+    backgroundColor: '#f8fafc',
   },
-  errorText: {
-    fontSize: 18,
-    color: '#ef4444',
+  errorIcon: {
+    fontSize: 64,
     marginBottom: 20,
   },
-  backButton: {
+  errorTitle: {
+    fontSize: 24,
+    fontWeight: 'bold',
+    color: '#ef4444',
+    marginBottom: 12,
+    textAlign: 'center',
+  },
+  errorText: {
+    fontSize: 16,
+    color: '#6b7280',
+    textAlign: 'center',
+    lineHeight: 24,
+    marginBottom: 30,
+  },
+  errorActions: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  retryButton: {
     backgroundColor: '#6366f1',
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+    borderRadius: 8,
+  },
+  retryButtonText: {
+    color: 'white',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  backButton: {
+    backgroundColor: '#6b7280',
     paddingHorizontal: 24,
     paddingVertical: 12,
     borderRadius: 8,
@@ -356,17 +544,46 @@ const styles = StyleSheet.create({
     backgroundColor: '#6366f1',
     padding: 20,
     paddingTop: 60,
+    position: 'relative',
+  },
+  backIcon: {
+    position: 'absolute',
+    top: 50,
+    left: 20,
+    zIndex: 1,
   },
   zoneName: {
     fontSize: 24,
     fontWeight: 'bold',
     color: 'white',
     marginBottom: 4,
+    paddingLeft: 40,
   },
   zonePrice: {
     fontSize: 18,
     color: 'white',
     opacity: 0.9,
+    paddingLeft: 40,
+  },
+  zoneDescription: {
+    fontSize: 14,
+    color: 'white',
+    opacity: 0.8,
+    marginTop: 8,
+    paddingLeft: 40,
+    lineHeight: 20,
+  },
+  operatingHours: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 8,
+    paddingLeft: 40,
+  },
+  operatingHoursText: {
+    fontSize: 14,
+    color: 'white',
+    opacity: 0.9,
+    marginLeft: 8,
   },
   section: {
     backgroundColor: 'white',
@@ -516,21 +733,27 @@ const styles = StyleSheet.create({
   summaryLabel: {
     fontSize: 16,
     color: '#64748b',
+    flex: 1,
   },
   summaryValue: {
     fontSize: 16,
     color: '#1f2937',
     fontWeight: '500',
+    flex: 1,
+    textAlign: 'right',
   },
   totalLabel: {
     fontSize: 18,
     color: '#1f2937',
     fontWeight: 'bold',
+    flex: 1,
   },
   totalValue: {
     fontSize: 18,
     color: '#6366f1',
     fontWeight: 'bold',
+    flex: 1,
+    textAlign: 'right',
   },
   bookingButtonContainer: {
     padding: 20,

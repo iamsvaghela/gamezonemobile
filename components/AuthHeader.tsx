@@ -1,5 +1,5 @@
-// components/AuthHeader.tsx - Fixed with Red Working Logout
-import React, { useState } from 'react';
+// components/AuthHeader.tsx - Direct logout for all users with NotificationBell
+import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
   Text,
@@ -12,6 +12,10 @@ import {
 import { router } from 'expo-router';
 import GoogleLoginButton from './GoogleLoginButton';
 import { useAuth } from '../contexts/AuthContext';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+
+// Import NotificationBell component
+import { NotificationBell } from './NotificationBell';
 
 interface AuthHeaderProps {
   style?: any;
@@ -21,9 +25,49 @@ export default function AuthHeader({ style }: AuthHeaderProps) {
   const { user, isLoggedIn, isLoading, login, logout } = useAuth();
   const [showLoginModal, setShowLoginModal] = useState(false);
   const [loggingOut, setLoggingOut] = useState(false);
+  
+  // Use ref to track if we've already redirected to prevent infinite loops
+  const hasRedirectedRef = useRef(false);
+
+  // 🔥 VENDOR REDIRECT LOGIC - Fixed to prevent infinite loops
+  useEffect(() => {
+    console.log('🔍 AuthHeader: Vendor redirect check:', {
+      isLoggedIn,
+      userRole: user?.role,
+      isLoading,
+      hasRedirected: hasRedirectedRef.current
+    });
+
+    // Only redirect if:
+    // 1. User is logged in
+    // 2. User is a vendor 
+    // 3. Not loading
+    // 4. Haven't already redirected
+    if (isLoggedIn && user?.role === 'vendor' && !isLoading && !hasRedirectedRef.current) {
+      console.log('🏢 VENDOR DETECTED - Redirecting to dashboard (one time only)...');
+      
+      // Mark as redirected IMMEDIATELY to prevent re-triggering
+      hasRedirectedRef.current = true;
+      
+      // Small delay to ensure navigation is ready
+      setTimeout(() => {
+        console.log('🚀 Executing vendor redirect now...');
+        router.replace('/vendor/dashboard');
+      }, 100);
+    }
+  }, [isLoggedIn, user?.role, isLoading]);
+
+  // Reset redirect flag when user logs out
+  useEffect(() => {
+    if (!isLoggedIn) {
+      console.log('🔄 User logged out - resetting redirect flag');
+      hasRedirectedRef.current = false;
+    }
+  }, [isLoggedIn]);
 
   const handleGoogleLoginSuccess = async (userData: any, token: string, isNewUser: boolean) => {
-    console.log('✅ Google login successful in header:', userData.email);
+    console.log('✅ Google login successful:', userData.email);
+    console.log('👤 User role:', userData.role);
     
     try {
       // Use auth context to login
@@ -33,139 +77,149 @@ export default function AuthHeader({ style }: AuthHeaderProps) {
       // Show success message
       Alert.alert(
         'Login Successful!',
-        isNewUser ? 
-          `Welcome to GameZone, ${userData.name}!` :
-          `Welcome back, ${userData.name}!`,
-        [{ text: 'Continue', onPress: () => {} }]
+        `Welcome ${userData.role === 'vendor' ? 'Business Owner' : 'Gamer'}, ${userData.name}!`,
+        [{ 
+          text: 'Continue',
+          onPress: () => {
+            console.log(`✅ ${userData.role} login completed`);
+          }
+        }]
       );
+      
     } catch (error) {
-      console.error('Login error in header:', error);
-      Alert.alert('Error', 'Login succeeded but failed to complete setup. Please try again.');
+      console.error('❌ Login error:', error);
+      Alert.alert('Error', 'Login succeeded but failed to complete setup.');
     }
   };
 
   const handleProfileClick = () => {
     if (isLoggedIn) {
-      // User is logged in, go to profile
-      router.push('/(tabs)/profile');
+      if (user?.role === 'vendor') {
+        console.log('🏢 Manual vendor redirect from profile click');
+        router.push('/vendor/dashboard');
+      } else {
+        router.push('/(tabs)/profile');
+      }
     } else {
-      // User is not logged in, show login modal
       setShowLoginModal(true);
     }
   };
 
-  const handleLogout = () => {
-    console.log('🔴🔴🔴 AUTH HEADER LOGOUT: Button clicked!');
-    console.log('🔴🔴🔴 AUTH HEADER LOGOUT: loggingOut state:', loggingOut);
+  // 🔧 DIRECT LOGOUT FUNCTION - No Alert dialog (same as vendor dashboard)
+  const handleLogout = async () => {
+    console.log('🚪 AuthHeader logout button clicked - DIRECT LOGOUT');
+    console.log('👤 User role:', user?.role);
+    console.log('📧 User email:', user?.email);
     
     if (loggingOut) {
-      console.log('⏳⏳⏳ AUTH HEADER LOGOUT: Already in progress, ignoring...');
+      console.log('⏳ Already logging out, ignoring click');
       return;
     }
-    
-    // Direct logout without Alert dialog (since Alert doesn't work properly)
-    console.log('🔴🔴🔴 AUTH HEADER LOGOUT: Proceeding with logout...');
-    
-    // Add a slight delay to prevent accidental logouts
-    setTimeout(() => {
-      console.log('🔴🔴🔴 AUTH HEADER LOGOUT: Executing logout after delay...');
-      performLogout();
-    }, 100);
+
+    // Call forceLogout directly without Alert dialog
+    await forceLogout();
   };
 
-  const performLogout = async () => {
-    console.log('🚪🚪🚪 AUTH HEADER LOGOUT: performLogout called');
-    console.log('🚪🚪🚪 AUTH HEADER LOGOUT: Current loggingOut state:', loggingOut);
+  // 🔧 FORCE LOGOUT - Same as vendor dashboard (always works)
+  const forceLogout = async () => {
+    console.log('🚪 AUTHHEADER FORCE LOGOUT: Starting...');
+    console.log('👤 Logging out user:', user?.role, user?.email);
     
-    if (loggingOut) {
-      console.log('⏳⏳⏳ AUTH HEADER LOGOUT: Already logging out, skipping...');
-      return;
-    }
-
     try {
-      console.log('🚪🚪🚪 AUTH HEADER LOGOUT: Setting loggingOut to true');
       setLoggingOut(true);
-      console.log('🚪🚪🚪 AUTH HEADER LOGOUT: Starting logout process...');
       
-      console.log('🧹🧹🧹 AUTH HEADER LOGOUT: Local state cleared');
+      // 1. Reset redirect flag
+      hasRedirectedRef.current = false;
+      console.log('✅ Reset redirect flag');
       
-      // Perform logout through AuthContext
-      console.log('📡📡📡 AUTH HEADER LOGOUT: Calling logout() from AuthContext');
-      await logout();
-      console.log('✅✅✅ AUTH HEADER LOGOUT: AuthContext logout completed');
+      // 2. Clear AsyncStorage manually
+      try {
+        await AsyncStorage.removeItem('authToken');
+        await AsyncStorage.removeItem('user');
+        console.log('✅ Cleared AsyncStorage');
+      } catch (storageError) {
+        console.error('⚠️ AsyncStorage clear error:', storageError);
+      }
       
-      // Force navigation to home screen
-      console.log('📱📱📱 AUTH HEADER LOGOUT: Navigating to home...');
+      // 3. Try AuthContext logout (but don't fail if it errors)
+      try {
+        await logout();
+        console.log('✅ AuthContext logout successful');
+      } catch (contextError) {
+        console.error('⚠️ AuthContext logout error:', contextError);
+        console.log('🔄 Continuing with manual logout...');
+      }
       
-      // Use replace to prevent going back
-      router.replace('/(tabs)');
+      // 4. Force navigation to home (try multiple methods)
+      console.log('🏠 Forcing navigation to home...');
       
-      // Small delay to ensure navigation completes
+      try {
+        // Try replace first
+        router.replace('/(tabs)');
+        console.log('✅ router.replace successful');
+      } catch (navError) {
+        console.error('❌ router.replace failed:', navError);
+        
+        // Try push as fallback
+        try {
+          router.push('/(tabs)');
+          console.log('✅ router.push successful');
+        } catch (pushError) {
+          console.error('❌ router.push failed:', pushError);
+          
+          // Try going to root
+          try {
+            router.replace('/');
+            console.log('✅ router.replace to root successful');
+          } catch (rootError) {
+            console.error('❌ All navigation methods failed:', rootError);
+          }
+        }
+      }
+      
+      // 5. Show success message (optional)
       setTimeout(() => {
-        console.log('🎉🎉🎉 AUTH HEADER LOGOUT: Logout process completed successfully');
-        Alert.alert(
-          'Logged Out',
-          'You have been successfully logged out.',
-          [{ text: 'OK' }]
-        );
-      }, 100);
+        try {
+          Alert.alert(
+            'Logged Out',
+            'You have been successfully logged out.',
+            [{ text: 'OK' }]
+          );
+        } catch (alertError) {
+          console.error('❌ Alert error:', alertError);
+        }
+      }, 500);
+      
+      console.log('🎉 AUTHHEADER FORCE LOGOUT: Completed successfully');
       
     } catch (error) {
-      console.error('❌❌❌ AUTH HEADER LOGOUT: Logout error:', error);
-      console.error('❌❌❌ AUTH HEADER LOGOUT: Error details:', JSON.stringify(error));
-      
-      // Even if logout fails, navigate to home
-      try {
-        console.log('🔄🔄🔄 AUTH HEADER LOGOUT: Force logout - navigating anyway');
-        
-        // Navigate to home
-        router.replace('/(tabs)');
-        
-        Alert.alert(
-          'Session Ended',
-          'Your session has been ended. You may need to refresh the app.',
-          [{ text: 'OK' }]
-        );
-      } catch (navError) {
-        console.error('❌❌❌ AUTH HEADER LOGOUT: Navigation error:', navError);
-        Alert.alert(
-          'Error',
-          'There was an issue logging out. Please refresh the app.',
-          [{ text: 'OK' }]
-        );
-      }
+      console.error('❌ AUTHHEADER FORCE LOGOUT: Error:', error);
     } finally {
-      console.log('🏁🏁🏁 AUTH HEADER LOGOUT: Setting loggingOut to false');
       setLoggingOut(false);
-      console.log('🏁🏁🏁 AUTH HEADER LOGOUT: Logout process finished');
     }
   };
 
   const handleGoogleLoginError = (error: string) => {
-    console.error('❌ Google login error in header:', error);
-    Alert.alert(
-      'Login Failed',
-      `Authentication failed: ${error}`,
-      [{ text: 'Try Again', onPress: () => {} }]
-    );
+    console.error('❌ Google login error:', error);
+    Alert.alert('Login Failed', `Authentication failed: ${error}`);
+  };
+
+  // Manual vendor redirect button for testing
+  const handleManualVendorRedirect = () => {
+    console.log('🔧 Manual vendor redirect button clicked');
+    if (user?.role === 'vendor') {
+      router.replace('/vendor/dashboard');
+    } else {
+      Alert.alert('Not a Vendor', 'Only vendors can access the dashboard');
+    }
   };
 
   if (isLoading) {
     return (
       <View style={[styles.header, style]}>
         <View style={styles.leftSection}>
-          <View style={styles.loadingContent}>
-            <View style={styles.loadingIcon}>
-              <Text style={styles.loadingIconText}>⏳</Text>
-            </View>
-            <View style={styles.loadingDetails}>
-              <Text style={styles.loadingText}>Loading...</Text>
-              <Text style={styles.loadingSubtext}>Checking authentication</Text>
-            </View>
-          </View>
-        </View>
-        <View style={styles.rightSection}>
-          {/* Removed notification button */}
+          <ActivityIndicator size="small" color="#6366f1" />
+          <Text style={styles.loadingText}>Loading...</Text>
         </View>
       </View>
     );
@@ -176,7 +230,6 @@ export default function AuthHeader({ style }: AuthHeaderProps) {
       <View style={[styles.header, style]}>
         <View style={styles.leftSection}>
           {isLoggedIn && user ? (
-            // Show user info when logged in
             <TouchableOpacity style={styles.userInfo} onPress={handleProfileClick}>
               <View style={styles.avatar}>
                 <Text style={styles.avatarText}>
@@ -184,12 +237,13 @@ export default function AuthHeader({ style }: AuthHeaderProps) {
                 </Text>
               </View>
               <View style={styles.userDetails}>
-                <Text style={styles.welcomeText}>Welcome, {user.name}!</Text>
+                <Text style={styles.welcomeText}>
+                  {user.role === 'vendor' ? '🏢 Business' : '🎮 Welcome'}, {user.name}!
+                </Text>
                 <Text style={styles.emailText}>{user.email}</Text>
               </View>
             </TouchableOpacity>
           ) : (
-            // Show login prompt when not logged in
             <TouchableOpacity style={styles.loginPrompt} onPress={handleProfileClick}>
               <View style={styles.loginIcon}>
                 <Text style={styles.loginIconText}>👤</Text>
@@ -203,19 +257,42 @@ export default function AuthHeader({ style }: AuthHeaderProps) {
         </View>
 
         <View style={styles.rightSection}>
+          {/* 🔔 NOTIFICATION BELL - Only show for logged-in users */}
+          {isLoggedIn && user && (
+            <NotificationBell 
+              iconColor="#6366f1" 
+              style={styles.notificationBell}
+            />
+          )}
+          
           {isLoggedIn && user ? (
             <>
-              <View style={styles.roleBadge}>
-                <Text style={styles.roleText}>
-                  {user.role === 'vendor' ? 'Business' : 'Gamer'}
+              <View style={[
+                styles.roleBadge,
+                user.role === 'vendor' && styles.vendorBadge
+              ]}>
+                <Text style={[
+                  styles.roleText,
+                  user.role === 'vendor' && styles.vendorText
+                ]}>
+                  {user.role === 'vendor' ? 'VENDOR' : 'GAMER'}
                 </Text>
               </View>
+              
+              {/* 🔧 MANUAL VENDOR REDIRECT BUTTON FOR TESTING */}
+              {user.role === 'vendor' && (
+                <TouchableOpacity 
+                  style={styles.dashboardButton} 
+                  onPress={handleManualVendorRedirect}
+                >
+                  <Text style={styles.dashboardButtonText}>Dashboard</Text>
+                </TouchableOpacity>
+              )}
+              
+              {/* 🔧 DIRECT LOGOUT BUTTON - Original icon style */}
               <TouchableOpacity 
-                style={[styles.logoutButton, loggingOut && styles.logoutButtonDisabled]} 
-                onPress={() => {
-                  console.log('🔴🔴🔴 AUTH HEADER LOGOUT: Logout button pressed!');
-                  handleLogout();
-                }}
+                style={[styles.logoutButton, loggingOut && styles.disabled]} 
+                onPress={handleLogout}
                 disabled={loggingOut}
               >
                 {loggingOut ? (
@@ -230,10 +307,10 @@ export default function AuthHeader({ style }: AuthHeaderProps) {
               <Text style={styles.loginButtonText}>Login</Text>
             </TouchableOpacity>
           )}
-          
-          {/* Removed notification bell */}
         </View>
       </View>
+
+
 
       {/* Google Login Modal */}
       <Modal
@@ -254,7 +331,7 @@ export default function AuthHeader({ style }: AuthHeaderProps) {
             <View style={styles.modalHeader}>
               <Text style={styles.modalTitle}>Welcome to GameZone!</Text>
               <Text style={styles.modalSubtitle}>
-                Sign in with Google to access your profile and book gaming zones.
+                Sign in with Google to access your account
               </Text>
             </View>
 
@@ -265,19 +342,10 @@ export default function AuthHeader({ style }: AuthHeaderProps) {
               style={styles.modalGoogleButton}
             />
 
-            <View style={styles.modalFeatures}>
-              <View style={styles.modalFeatureItem}>
-                <Text style={styles.modalFeatureIcon}>✅</Text>
-                <Text style={styles.modalFeatureText}>Quick and secure login</Text>
-              </View>
-              <View style={styles.modalFeatureItem}>
-                <Text style={styles.modalFeatureIcon}>📅</Text>
-                <Text style={styles.modalFeatureText}>Book gaming zones</Text>
-              </View>
-              <View style={styles.modalFeatureItem}>
-                <Text style={styles.modalFeatureIcon}>🎯</Text>
-                <Text style={styles.modalFeatureText}>Track your reservations</Text>
-              </View>
+            <View style={styles.vendorNote}>
+              <Text style={styles.vendorNoteText}>
+                🏢 Business owners will be automatically redirected to the vendor dashboard
+              </Text>
             </View>
           </View>
         </View>
@@ -299,44 +367,19 @@ const styles = StyleSheet.create({
   },
   leftSection: {
     flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
   },
   rightSection: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
   },
-  
-  // Loading states
-  loadingContent: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  loadingIcon: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: '#f3f4f6',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginRight: 12,
-  },
-  loadingIconText: {
-    fontSize: 20,
-  },
-  loadingDetails: {
-    flex: 1,
-  },
   loadingText: {
-    fontSize: 16,
-    fontWeight: '600',
+    marginLeft: 8,
+    fontSize: 14,
     color: '#6b7280',
   },
-  loadingSubtext: {
-    fontSize: 12,
-    color: '#9ca3af',
-  },
-  
-  // Logged in user styles
   userInfo: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -367,8 +410,6 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: '#6b7280',
   },
-  
-  // Not logged in styles
   loginPrompt: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -397,17 +438,36 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: '#6b7280',
   },
-  
-  // Right section styles
+  // 🔔 NOTIFICATION BELL STYLES
+  notificationBell: {
+    marginRight: 8,
+  },
   roleBadge: {
-    backgroundColor: '#f0f9ff',
+    backgroundColor: '#dbeafe',
     borderRadius: 12,
     paddingHorizontal: 8,
     paddingVertical: 4,
   },
+  vendorBadge: {
+    backgroundColor: '#fef3c7',
+  },
   roleText: {
-    fontSize: 11,
-    color: '#0369a1',
+    fontSize: 10,
+    color: '#1e40af',
+    fontWeight: '600',
+  },
+  vendorText: {
+    color: '#92400e',
+  },
+  dashboardButton: {
+    backgroundColor: '#10b981',
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+  },
+  dashboardButtonText: {
+    color: '#ffffff',
+    fontSize: 12,
     fontWeight: '500',
   },
   loginButton: {
@@ -428,18 +488,16 @@ const styles = StyleSheet.create({
     paddingVertical: 6,
     minWidth: 60,
     alignItems: 'center',
-    justifyContent: 'center',
-  },
-  logoutButtonDisabled: {
-    opacity: 0.5,
   },
   logoutButtonText: {
     color: '#6b7280',
     fontSize: 12,
     fontWeight: '500',
   },
+  disabled: {
+    opacity: 0.5,
+  },
 
-  // Modal styles
   modalOverlay: {
     flex: 1,
     backgroundColor: 'rgba(0, 0, 0, 0.5)',
@@ -475,7 +533,7 @@ const styles = StyleSheet.create({
   modalHeader: {
     alignItems: 'center',
     marginBottom: 24,
-    paddingRight: 32, // Account for close button
+    paddingRight: 32,
   },
   modalTitle: {
     fontSize: 24,
@@ -491,22 +549,16 @@ const styles = StyleSheet.create({
     lineHeight: 20,
   },
   modalGoogleButton: {
-    marginBottom: 24,
+    marginBottom: 16,
   },
-  modalFeatures: {
-    gap: 12,
+  vendorNote: {
+    backgroundColor: '#fef3c7',
+    borderRadius: 8,
+    padding: 12,
   },
-  modalFeatureItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  modalFeatureIcon: {
-    fontSize: 16,
-    marginRight: 12,
-    width: 20,
-  },
-  modalFeatureText: {
-    fontSize: 14,
-    color: '#6b7280',
+  vendorNoteText: {
+    fontSize: 12,
+    color: '#92400e',
+    textAlign: 'center',
   },
 });

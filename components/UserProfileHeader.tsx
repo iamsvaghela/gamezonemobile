@@ -1,4 +1,4 @@
-// components/UserProfileHeader.tsx - Fixed import path
+// components/UserProfileHeader.tsx - Fixed alignment for vendor pages
 import React, { useState, useEffect } from 'react';
 import {
   View,
@@ -9,171 +9,363 @@ import {
   Alert,
   ActivityIndicator,
 } from 'react-native';
-import { router } from 'expo-router';
-// FIXED: Updated import path to point to services directory at root level
-import apiService from '../services/api';
+import { router, usePathname } from 'expo-router';
+import { useAuth } from '../contexts/AuthContext';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
-interface User {
-  id: string;
-  name: string;
-  email: string;
-  role: string;
-  profileImage?: string;
-  isVerified?: boolean;
-}
+// Import NotificationBell component
+import { NotificationBell } from './NotificationBell';
 
 interface UserProfileHeaderProps {
   style?: any;
 }
 
 export default function UserProfileHeader({ style }: UserProfileHeaderProps) {
-  const [user, setUser] = useState<User | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const { user, isLoggedIn, isLoading, logout } = useAuth();
+  const [loggingOut, setLoggingOut] = useState(false);
+  const pathname = usePathname();
 
-  // Check authentication status and get user data
-  useEffect(() => {
-    checkAuthStatus();
-  }, []);
-
-  const checkAuthStatus = async () => {
-    try {
-      setLoading(true);
-      
-      // Check if user is authenticated
-      const isAuth = await apiService.isAuthenticated();
-      setIsAuthenticated(isAuth);
-
-      if (isAuth) {
-        // Get user data from storage first (faster)
-        const storedUser = await apiService.getUser();
-        if (storedUser) {
-          setUser(storedUser);
-        }
-
-        // Then get fresh data from API
-        try {
-          const profileResponse = await apiService.getProfile();
-          if (profileResponse.success) {
-            setUser(profileResponse.user);
-            // Update stored user data
-            await apiService.setUser(profileResponse.user);
-          }
-        } catch (error) {
-          console.log('Profile fetch failed, using cached data:', error);
-          // Continue with cached user data
-        }
-      }
-    } catch (error) {
-      console.error('Auth check error:', error);
-      setIsAuthenticated(false);
-      setUser(null);
-    } finally {
-      setLoading(false);
-    }
-  };
+  // Check if we're on a vendor page to show different styling
+  const isVendorPage = pathname?.startsWith('/vendor/');
 
   const handleLogin = () => {
     router.push('/login');
   };
 
+  // 🔧 DIRECT LOGOUT FUNCTION - With enhanced debugging
   const handleLogout = async () => {
-    Alert.alert(
-      'Logout',
-      'Are you sure you want to logout?',
-      [
-        {
-          text: 'Cancel',
-          style: 'cancel',
-        },
-        {
-          text: 'Logout',
-          onPress: async () => {
-            try {
-              await apiService.logout();
-              setUser(null);
-              setIsAuthenticated(false);
-              
-              // Optionally refresh the current screen or navigate to home
-              // router.replace('/');
-            } catch (error) {
-              console.error('Logout error:', error);
-              Alert.alert('Error', 'Failed to logout. Please try again.');
+    console.log('🚪 UserProfileHeader logout button clicked - DIRECT LOGOUT');
+    console.log('👤 User role:', user?.role);
+    console.log('📧 User email:', user?.email);
+    console.log('📍 Current pathname:', pathname);
+    console.log('🏢 Is vendor page:', isVendorPage);
+    console.log('⏳ Currently logging out:', loggingOut);
+    
+    if (loggingOut) {
+      console.log('⏳ Already logging out, ignoring click');
+      return;
+    }
+
+    // Call forceLogout directly without Alert dialog
+    await forceLogout();
+  };
+
+  // 🔧 FORCE LOGOUT - Enhanced debugging for vendor pages
+  const forceLogout = async () => {
+    const startTime = Date.now();
+    console.log('🚪 USERPROFILEHEADER FORCE LOGOUT: Starting...');
+    console.log('👤 Logging out user:', user?.role, user?.email);
+    console.log('📍 Current pathname:', pathname);
+    console.log('🏢 Is vendor page:', isVendorPage);
+    console.log('⏰ Start time:', new Date().toISOString());
+    
+    try {
+      console.log('🔄 Step 1: Setting loggingOut to true');
+      setLoggingOut(true);
+      console.log('✅ Step 1 complete');
+      
+      // 1. Clear AsyncStorage manually
+      console.log('🔄 Step 2: Clearing AsyncStorage...');
+      try {
+        await AsyncStorage.removeItem('authToken');
+        console.log('✅ AuthToken removed from AsyncStorage');
+        await AsyncStorage.removeItem('user');
+        console.log('✅ User removed from AsyncStorage');
+        console.log('✅ Step 2 complete - AsyncStorage cleared');
+      } catch (storageError) {
+        console.error('❌ Step 2 failed - AsyncStorage clear error:', storageError);
+      }
+      
+      // 2. Try AuthContext logout (but don't fail if it errors)
+      console.log('🔄 Step 3: Calling AuthContext logout...');
+      try {
+        await logout();
+        console.log('✅ Step 3 complete - AuthContext logout successful');
+      } catch (contextError) {
+        console.error('❌ Step 3 failed - AuthContext logout error:', contextError);
+        console.log('🔄 Continuing with manual logout...');
+      }
+      
+      // 3. Add longer delay for vendor pages to prevent navigation conflicts
+      const navigationDelay = isVendorPage ? 150 : 50;
+      console.log('🔄 Step 4: Adding navigation delay of', navigationDelay, 'ms...');
+      await new Promise(resolve => setTimeout(resolve, navigationDelay));
+      console.log('✅ Step 4 complete - Navigation delay finished');
+      
+      // 4. Force navigation to home with enhanced error handling
+      console.log('🔄 Step 5: Starting navigation to home...');
+      console.log('🏠 Current route before navigation:', pathname);
+      
+      // Clear any pending navigation or auth redirects
+      if (typeof window !== 'undefined') {
+        console.log('🧹 Clearing window history state...');
+        try {
+          // Clear any OAuth callback states
+          if (window.location.hash.includes('state=') || window.location.search.includes('callback')) {
+            console.log('🔧 Detected OAuth callback, clearing hash and search params');
+            window.history.replaceState(null, '', window.location.pathname);
+          }
+          
+          // Clear all session storage to prevent OAuth conflicts
+          window.sessionStorage.clear();
+          console.log('✅ Session storage cleared');
+          
+          // Clear specific OAuth-related items
+          ['oauth_state', 'oauth_redirect', 'auth_callback'].forEach(key => {
+            window.localStorage.removeItem(key);
+            window.sessionStorage.removeItem(key);
+          });
+          
+          window.history.replaceState(null, '', '/');
+          console.log('✅ Window history cleared');
+        } catch (historyError) {
+          console.error('❌ History clear error:', historyError);
+        }
+      }
+      
+      try {
+        // For vendor pages, try direct navigation first
+        if (isVendorPage) {
+          console.log('🏢 Vendor logout - using router.replace("/(tabs)")');
+          
+          // Add immediate redirect prevention and OAuth cleanup
+          console.log('🛡️ Preventing auth redirects and cleaning OAuth state...');
+          if (typeof window !== 'undefined') {
+            window.localStorage.setItem('preventAuthRedirect', 'true');
+            
+            // Close any OAuth popup windows
+            if (window.opener) {
+              console.log('🔧 Detected OAuth popup, closing...');
+              try {
+                window.close();
+              } catch (closeError) {
+                console.error('❌ Could not close OAuth popup:', closeError);
+              }
             }
-          },
-        },
-      ]
-    );
+            
+            // Handle multiple tabs scenario
+            const currentUrl = window.location.href;
+            if (currentUrl.includes('/auth/callback') || currentUrl.includes('#state=')) {
+              console.log('🔧 OAuth callback detected, redirecting to home');
+              window.location.replace('/');
+              return; // Exit early for OAuth callbacks
+            }
+          }
+          
+          router.replace('/(tabs)');
+          console.log('✅ Step 5a complete - Vendor router.replace successful');
+        } else {
+          console.log('👤 Regular logout - using router.replace("/(tabs)")');
+          router.replace('/(tabs)');
+          console.log('✅ Step 5b complete - Regular router.replace successful');
+        }
+        
+        // Clear the redirect prevention after a short delay
+        setTimeout(() => {
+          if (typeof window !== 'undefined') {
+            window.localStorage.removeItem('preventAuthRedirect');
+            console.log('🧹 Cleared auth redirect prevention');
+          }
+        }, 2000);
+        
+      } catch (navError) {
+        console.error('❌ Step 5 failed - router.replace error:', navError);
+        console.log('🔄 Attempting fallback navigation...');
+        
+        // Enhanced fallback for vendor pages
+        const fallbackDelay = isVendorPage ? 500 : 200;
+        console.log('⏳ Using fallback delay of', fallbackDelay, 'ms');
+        
+        setTimeout(() => {
+          console.log('🔄 Step 5 Fallback 1: Trying router.push...');
+          try {
+            router.push('/(tabs)');
+            console.log('✅ Step 5 Fallback 1 complete - router.push successful');
+          } catch (pushError) {
+            console.error('❌ Step 5 Fallback 1 failed - router.push error:', pushError);
+            console.log('🔄 Step 5 Fallback 2: Trying window.location.replace...');
+            
+            // Use window.location.replace instead of router for final fallback
+            setTimeout(() => {
+              try {
+                if (typeof window !== 'undefined') {
+                  console.log('🌐 Using window.location.replace for immediate navigation');
+                  window.location.replace('/');
+                  console.log('✅ Step 5 Fallback 2 complete - window.location.replace used');
+                } else {
+                  console.error('❌ Step 5 Fallback 2 failed - window not available');
+                }
+              } catch (windowError) {
+                console.error('❌ Step 5 Fallback 2 failed - window.location.replace error:', windowError);
+              }
+            }, 300);
+          }
+        }, fallbackDelay);
+      }
+      
+      const endTime = Date.now();
+      const duration = endTime - startTime;
+      console.log('🎉 USERPROFILEHEADER FORCE LOGOUT: Completed successfully');
+      console.log('⏰ Total logout duration:', duration, 'ms');
+      console.log('⏰ End time:', new Date().toISOString());
+      
+    } catch (error) {
+      const endTime = Date.now();
+      const duration = endTime - startTime;
+      console.error('❌ USERPROFILEHEADER FORCE LOGOUT: Error occurred:', error);
+      console.error('❌ Error type:', typeof error);
+      console.error('❌ Error message:', error?.message);
+      console.error('❌ Error stack:', error?.stack);
+      console.log('⏰ Error occurred after:', duration, 'ms');
+    } finally {
+      // Reset logging out state with delay to prevent quick re-renders
+      console.log('🔄 Step 7: Scheduling loggingOut state reset...');
+      setTimeout(() => {
+        console.log('🔄 Resetting loggingOut state to false');
+        setLoggingOut(false);
+        console.log('✅ Step 7 complete - loggingOut state reset');
+      }, 200);
+    }
   };
 
   const handleProfile = () => {
-    // Navigate to profile screen - Match your file structure
-    router.push('/(tabs)/profile');
+    if (user?.role === 'vendor') {
+      router.push('/vendor/dashboard');
+    } else {
+      router.push('/(tabs)/profile');
+    }
   };
 
-  if (loading) {
+  if (isLoading || loggingOut) {
     return (
-      <View style={[styles.container, styles.loadingContainer, style]}>
-        <ActivityIndicator color="#6366f1" size="small" />
-        <Text style={styles.loadingText}>Loading...</Text>
+      <View style={[
+        styles.container,
+        style
+      ]}>
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator color="#6366f1" size="small" />
+          <Text style={styles.loadingText}>
+            {loggingOut ? 'Logging out...' : 'Loading...'}
+          </Text>
+        </View>
       </View>
     );
   }
 
-  if (!isAuthenticated || !user) {
+  if (!isLoggedIn || !user) {
+    // Don't show login button if currently logging out
+    if (loggingOut) {
+      return (
+        <View style={[
+          styles.container,
+          style
+        ]}>
+          <View style={styles.loadingContainer}>
+            <ActivityIndicator color="#6366f1" size="small" />
+            <Text style={styles.loadingText}>Logging out...</Text>
+          </View>
+        </View>
+      );
+    }
     // Show login/signup button
     return (
-      <View style={[styles.container, style]}>
-        <TouchableOpacity style={styles.loginButton} onPress={handleLogin}>
-          <Text style={styles.loginButtonText}>Login / Sign Up</Text>
+      <View style={[
+        styles.container,
+        isVendorPage && styles.vendorContainer,
+        style
+      ]}>
+        <TouchableOpacity style={[
+          styles.loginButton,
+          isVendorPage && styles.vendorLoginButton
+        ]} onPress={handleLogin}>
+          <Text style={[
+            styles.loginButtonText,
+            isVendorPage && styles.vendorLoginButtonText
+          ]}>Login / Sign Up</Text>
         </TouchableOpacity>
       </View>
     );
   }
 
-  // Show user profile
+  // 🎯 FIXED LAYOUT - Better alignment for vendor pages
   return (
-    <View style={[styles.container, style]}>
-      <View style={styles.userContainer}>
-        {/* User Avatar */}
-        <TouchableOpacity onPress={handleProfile} style={styles.avatarContainer}>
-          {user.profileImage ? (
-            <Image source={{ uri: user.profileImage }} style={styles.avatar} />
-          ) : (
-            <View style={styles.avatarPlaceholder}>
-              <Text style={styles.avatarText}>
-                {user.name.charAt(0).toUpperCase()}
-              </Text>
-            </View>
-          )}
-          {user.isVerified && (
-            <View style={styles.verifiedBadge}>
-              <Text style={styles.verifiedIcon}>✓</Text>
-            </View>
-          )}
-        </TouchableOpacity>
+    <View style={[
+      styles.container,
+      style
+    ]}>
+      {/* Header Row - Clean layout like gamer version */}
+      <View style={styles.headerRow}>
+        {/* Left Side - User Info */}
+        <View style={styles.leftContent}>
+          {/* User Avatar */}
+          <TouchableOpacity onPress={handleProfile} style={styles.avatarContainer}>
+            {user.profileImage ? (
+              <Image source={{ uri: user.profileImage }} style={styles.avatar} />
+            ) : (
+              <View style={styles.avatarPlaceholder}>
+                <Text style={styles.avatarText}>
+                  {user.name.charAt(0).toUpperCase()}
+                </Text>
+              </View>
+            )}
+            {user.isVerified && (
+              <View style={styles.verifiedBadge}>
+                <Text style={styles.verifiedIcon}>✓</Text>
+              </View>
+            )}
+          </TouchableOpacity>
 
-        {/* User Info */}
-        <TouchableOpacity onPress={handleProfile} style={styles.userInfo}>
-          <Text style={styles.userName} numberOfLines={1}>
-            Welcome, {user.name}!
-          </Text>
-          <View style={styles.userDetails}>
+          {/* User Details */}
+          <TouchableOpacity onPress={handleProfile} style={styles.userInfo}>
+            <Text style={styles.userName} numberOfLines={1}>
+              Welcome, {user.name}!
+            </Text>
             <Text style={styles.userEmail} numberOfLines={1}>
               {user.email}
             </Text>
-            <View style={styles.roleBadge}>
-              <Text style={styles.roleText}>
-                {user.role === 'vendor' ? '🏢 Business' : '🎮 Gamer'}
-              </Text>
-            </View>
-          </View>
-        </TouchableOpacity>
+          </TouchableOpacity>
+        </View>
 
-        {/* Logout Button */}
-        <TouchableOpacity onPress={handleLogout} style={styles.logoutButton}>
-          <Text style={styles.logoutIcon}>👋</Text>
-        </TouchableOpacity>
+        {/* Right Side - Actions */}
+        <View style={styles.rightContent}>
+          {/* Role Badge */}
+          <View style={[
+            styles.roleBadge,
+            user.role === 'vendor' ? styles.vendorRoleBadge : styles.gamerRoleBadge
+          ]}>
+            <Text style={[
+              styles.roleText,
+              user.role === 'vendor' ? styles.vendorRoleText : styles.gamerRoleText
+            ]}>
+              {user.role === 'vendor' ? 'VENDOR' : 'GAMER'}
+            </Text>
+          </View>
+
+          {/* Logout Button */}
+          <TouchableOpacity 
+            onPress={handleLogout} 
+            style={[
+              styles.logoutButton,
+              loggingOut && styles.logoutButtonDisabled
+            ]}
+            disabled={loggingOut}
+          >
+            {loggingOut ? (
+              <ActivityIndicator 
+                size="small" 
+                color="#6b7280" 
+              />
+            ) : (
+              <Text style={styles.logoutButtonText}>Logout</Text>
+            )}
+          </TouchableOpacity>
+
+          {/* 🔔 NOTIFICATION BELL - Properly aligned */}
+          <NotificationBell 
+            iconColor="#6366f1" 
+            style={styles.notificationBell}
+          />
+        </View>
       </View>
     </View>
   );
@@ -190,6 +382,11 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
     shadowRadius: 4,
+  },
+  vendorContainer: {
+    backgroundColor: '#6366f1',
+    borderColor: 'rgba(255, 255, 255, 0.2)',
+    borderWidth: 1,
   },
   loadingContainer: {
     flexDirection: 'row',
@@ -208,14 +405,35 @@ const styles = StyleSheet.create({
     padding: 16,
     alignItems: 'center',
   },
+  vendorLoginButton: {
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.3)',
+  },
   loginButtonText: {
     color: '#ffffff',
     fontSize: 16,
     fontWeight: '600',
   },
-  userContainer: {
+  vendorLoginButtonText: {
+    color: '#ffffff',
+  },
+  // 🎯 FIXED LAYOUT STYLES
+  headerRow: {
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'space-between',
+    width: '100%',
+  },
+  leftContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+  },
+  rightContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
   },
   avatarContainer: {
     position: 'relative',
@@ -260,7 +478,6 @@ const styles = StyleSheet.create({
   },
   userInfo: {
     flex: 1,
-    marginRight: 12,
   },
   userName: {
     fontSize: 16,
@@ -268,36 +485,50 @@ const styles = StyleSheet.create({
     color: '#1f2937',
     marginBottom: 4,
   },
-  userDetails: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    flexWrap: 'wrap',
-  },
   userEmail: {
     fontSize: 14,
     color: '#6b7280',
-    marginRight: 8,
-    flex: 1,
   },
   roleBadge: {
-    backgroundColor: '#f3f4f6',
     borderRadius: 12,
     paddingHorizontal: 8,
     paddingVertical: 2,
   },
+  gamerRoleBadge: {
+    backgroundColor: '#f3f4f6',
+  },
+  vendorRoleBadge: {
+    backgroundColor: '#fef3c7',
+  },
   roleText: {
     fontSize: 12,
-    color: '#4b5563',
     fontWeight: '500',
+  },
+  gamerRoleText: {
+    color: '#4b5563',
+  },
+  vendorRoleText: {
+    color: '#92400e',
   },
   logoutButton: {
     backgroundColor: '#f9fafb',
     borderRadius: 8,
-    padding: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
     alignItems: 'center',
     justifyContent: 'center',
+    minWidth: 60,
   },
-  logoutIcon: {
-    fontSize: 20,
+  logoutButtonText: {
+    fontSize: 12,
+    color: '#6b7280',
+    fontWeight: '500',
+  },
+  logoutButtonDisabled: {
+    opacity: 0.5,
+  },
+  // 🔔 NOTIFICATION BELL STYLES
+  notificationBell: {
+    // Clean alignment with other elements
   },
 });

@@ -1,4 +1,4 @@
-// app/(tabs)/gamezones.tsx
+// app/(tabs)/gamezone.tsx - Fixed with proper login modal
 import React, { useState, useEffect } from 'react';
 import {
   View,
@@ -11,18 +11,23 @@ import {
   TextInput,
   Alert,
   RefreshControl,
+  Modal,
 } from 'react-native';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import { useAuth } from '../../contexts/AuthContext';
+import GoogleLoginButton from '../../components/GoogleLoginButton';
 import apiService from '../../services/api';
 import type { GameZone } from '../../services/api';
 
 export default function GameZonesScreen() {
+  const { isLoggedIn, login } = useAuth();
   const [gameZones, setGameZones] = useState<GameZone[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [filteredZones, setFilteredZones] = useState<GameZone[]>([]);
+  const [showLoginModal, setShowLoginModal] = useState(false);
 
   useEffect(() => {
     loadGameZones();
@@ -56,34 +61,17 @@ export default function GameZonesScreen() {
       
       const data = await response.json();
       console.log('🔧 Direct fetch data:', data);
-      console.log('🔧 Data keys:', Object.keys(data));
       
-      // Try different ways to access the gamezones
-      console.log('🔧 Method 1 - data.gamezones:', data.gamezones);
-      console.log('🔧 Method 2 - data["gamezones"]:', data["gamezones"]);
-      console.log('🔧 Method 3 - Object.values:', Object.values(data));
-      
-      // Use bracket notation instead of dot notation
       let zones = data["gamezones"] || Object.values(data)[0] || [];
       
       // If still empty, try to find the array in the object
       if (!Array.isArray(zones) || zones.length === 0) {
         for (const key in data) {
           if (Array.isArray(data[key]) && data[key].length > 0) {
-            console.log('🔧 Found array at key:', key, data[key]);
             zones = data[key];
             break;
           }
         }
-      }
-      
-      console.log('📱 Final zones:', zones);
-      console.log('📱 Zones length:', zones.length);
-      console.log('📱 Zones isArray:', Array.isArray(zones));
-      
-      if (zones.length > 0) {
-        console.log('📱 First zone:', zones[0]);
-        console.log('📱 First zone name:', zones[0]?.name);
       }
       
       setGameZones(zones);
@@ -106,14 +94,54 @@ export default function GameZonesScreen() {
     setRefreshing(false);
   };
 
+  const handleGoogleLogin = async (userData: any, token: string, isNewUser: boolean) => {
+    console.log('✅ Google login successful in gamezone:', userData.email);
+    
+    try {
+      // Use auth context to login
+      await login(userData, token);
+      setShowLoginModal(false);
+      
+      // Show success message
+      Alert.alert(
+        'Login Successful!',
+        isNewUser ? 
+          `Welcome to GameZone, ${userData.name}!` :
+          `Welcome back, ${userData.name}!`,
+        [{ text: 'Continue', onPress: () => {} }]
+      );
+    } catch (error) {
+      console.error('Login error in gamezone:', error);
+      Alert.alert('Error', 'Login succeeded but failed to complete setup. Please try again.');
+    }
+  };
+
+  const handleGoogleLoginError = (error: string) => {
+    console.error('❌ Google login error in gamezone:', error);
+    Alert.alert(
+      'Login Failed',
+      `Authentication failed: ${error}`,
+      [{ text: 'Try Again', onPress: () => {} }]
+    );
+  };
+
   const handleZonePress = (zone: GameZone) => {
+    if (!isLoggedIn) {
+      setShowLoginModal(true);
+      return;
+    }
     router.push(`/gamezone/${zone._id}`);
+  };
+
+  const handleLoginClick = () => {
+    setShowLoginModal(true);
   };
 
   const renderZoneCard = ({ item: zone }: { item: GameZone }) => (
     <TouchableOpacity
       style={styles.zoneCard}
       onPress={() => handleZonePress(zone)}
+      activeOpacity={0.7}
     >
       <Image
         source={{ 
@@ -200,50 +228,143 @@ export default function GameZonesScreen() {
     );
   }
 
-  return (
-    <View style={styles.container}>
-      <View style={styles.header}>
-        <Text style={styles.headerTitle}>Gaming Zones</Text>
-        <Text style={styles.headerSubtitle}>
-          {filteredZones.length} zone{filteredZones.length !== 1 ? 's' : ''} available
-        </Text>
-      </View>
-
-      <View style={styles.searchContainer}>
-        <View style={styles.searchInputContainer}>
-          <Ionicons name="search-outline" size={20} color="#64748b" />
-          <TextInput
-            style={styles.searchInput}
-            placeholder="Search zones, amenities, or locations"
-            value={searchQuery}
-            onChangeText={setSearchQuery}
-            placeholderTextColor="#9ca3af"
-          />
-          {searchQuery.length > 0 && (
-            <TouchableOpacity onPress={() => setSearchQuery('')}>
-              <Ionicons name="close-circle" size={20} color="#9ca3af" />
-            </TouchableOpacity>
-          )}
+  // Show login prompt screen when not logged in
+  if (!isLoggedIn) {
+    return (
+      <View style={styles.container}>
+        <View style={styles.header}>
+          <Text style={styles.headerTitle}>Gaming Zones</Text>
+        </View>
+        
+        <View style={styles.notAuthenticatedContainer}>
+          <View style={styles.loginPrompt}>
+            <View style={styles.loginIcon}>
+              <Text style={styles.loginIconText}>🎮</Text>
+            </View>
+            <Text style={styles.loginTitle}>Welcome to GameZone!</Text>
+            <Text style={styles.loginSubtitle}>
+              Sign in with Google to access your profile and book gaming zones.
+            </Text>
+            
+            <GoogleLoginButton
+              onSuccess={handleGoogleLogin}
+              onError={handleGoogleLoginError}
+              role="user"
+              style={styles.googleLoginButton}
+            />
+            
+            <View style={styles.features}>
+              <View style={styles.featureItem}>
+                <Text style={styles.featureIcon}>✅</Text>
+                <Text style={styles.featureText}>Quick and secure login</Text>
+              </View>
+              <View style={styles.featureItem}>
+                <Text style={styles.featureIcon}>📅</Text>
+                <Text style={styles.featureText}>Book gaming zones</Text>
+              </View>
+              <View style={styles.featureItem}>
+                <Text style={styles.featureIcon}>🎯</Text>
+                <Text style={styles.featureText}>Track your reservations</Text>
+              </View>
+            </View>
+          </View>
         </View>
       </View>
+    );
+  }
 
-      <FlatList
-        data={filteredZones}
-        renderItem={renderZoneCard}
-        keyExtractor={(item) => item._id}
-        contentContainerStyle={styles.listContainer}
-        refreshControl={
-          <RefreshControl
-            refreshing={refreshing}
-            onRefresh={onRefresh}
-            colors={['#6366f1']}
-            tintColor="#6366f1"
-          />
-        }
-        ListEmptyComponent={renderEmptyState}
-        showsVerticalScrollIndicator={false}
-      />
-    </View>
+  return (
+    <>
+      <View style={styles.container}>
+        <View style={styles.header}>
+          <Text style={styles.headerTitle}>Gaming Zones</Text>
+          <Text style={styles.headerSubtitle}>
+            {filteredZones.length} zone{filteredZones.length !== 1 ? 's' : ''} available
+          </Text>
+        </View>
+
+        <View style={styles.searchContainer}>
+          <View style={styles.searchInputContainer}>
+            <Ionicons name="search-outline" size={20} color="#64748b" />
+            <TextInput
+              style={styles.searchInput}
+              placeholder="Search zones, amenities, or locations"
+              value={searchQuery}
+              onChangeText={setSearchQuery}
+              placeholderTextColor="#9ca3af"
+            />
+            {searchQuery.length > 0 && (
+              <TouchableOpacity onPress={() => setSearchQuery('')}>
+                <Ionicons name="close-circle" size={20} color="#9ca3af" />
+              </TouchableOpacity>
+            )}
+          </View>
+        </View>
+
+        <FlatList
+          data={filteredZones}
+          renderItem={renderZoneCard}
+          keyExtractor={(item) => item._id}
+          contentContainerStyle={styles.listContainer}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={onRefresh}
+              colors={['#6366f1']}
+              tintColor="#6366f1"
+            />
+          }
+          ListEmptyComponent={renderEmptyState}
+          showsVerticalScrollIndicator={false}
+        />
+      </View>      {/* Google Login Modal - Only needed when logged in for other interactions */}
+      <Modal
+        visible={showLoginModal}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setShowLoginModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <TouchableOpacity 
+              style={styles.closeButton}
+              onPress={() => setShowLoginModal(false)}
+            >
+              <Text style={styles.closeButtonText}>✕</Text>
+            </TouchableOpacity>
+            
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Welcome to GameZone!</Text>
+              <Text style={styles.modalSubtitle}>
+                Sign in with Google to access your profile and book gaming zones.
+              </Text>
+            </View>
+
+            <GoogleLoginButton
+              onSuccess={handleGoogleLogin}
+              onError={handleGoogleLoginError}
+              role="user"
+              style={styles.modalGoogleButton}
+            />
+
+            <View style={styles.modalFeatures}>
+              <View style={styles.modalFeatureItem}>
+                <Text style={styles.modalFeatureIcon}>✅</Text>
+                <Text style={styles.modalFeatureText}>Quick and secure login</Text>
+              </View>
+              <View style={styles.modalFeatureItem}>
+                <Text style={styles.modalFeatureIcon}>📅</Text>
+                <Text style={styles.modalFeatureText}>Book gaming zones</Text>
+              </View>
+              <View style={styles.modalFeatureItem}>
+                <Text style={styles.modalFeatureIcon}>🎯</Text>
+                <Text style={styles.modalFeatureText}>Track your reservations</Text>
+              </View>
+            </View>
+          </View>
+        </View>
+      </Modal>
+    </>
   );
 }
 
@@ -280,6 +401,72 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: 'white',
     opacity: 0.8,
+  },
+  loginPrompt: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 40,
+  },
+  loginIcon: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    backgroundColor: '#f0f9ff',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 24,
+  },
+  loginIconText: {
+    fontSize: 40,
+    color: '#6366f1',
+  },
+  loginTitle: {
+    fontSize: 24,
+    fontWeight: 'bold',
+    color: '#1f2937',
+    marginBottom: 8,
+    textAlign: 'center',
+  },
+  loginSubtitle: {
+    fontSize: 16,
+    color: '#6b7280',
+    textAlign: 'center',
+    marginBottom: 32,
+    lineHeight: 24,
+  },
+  googleLoginButton: {
+    backgroundColor: '#ffffff',
+    borderRadius: 12,
+    paddingVertical: 16,
+    paddingHorizontal: 32,
+    marginBottom: 24,
+    minWidth: 250,
+    borderWidth: 1,
+    borderColor: '#d1d5db',
+    elevation: 2,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+  },
+  features: {
+    alignSelf: 'stretch',
+    maxWidth: 300,
+  },
+  featureItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  featureIcon: {
+    fontSize: 16,
+    marginRight: 12,
+    width: 20,
+  },
+  featureText: {
+    fontSize: 14,
+    color: '#6b7280',
   },
   searchContainer: {
     padding: 16,
@@ -442,5 +629,75 @@ const styles = StyleSheet.create({
     color: 'white',
     fontSize: 16,
     fontWeight: '600',
+  },
+  // Modal styles
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  modalContent: {
+    backgroundColor: '#ffffff',
+    borderRadius: 20,
+    padding: 24,
+    width: '100%',
+    maxWidth: 350,
+    position: 'relative',
+  },
+  closeButton: {
+    position: 'absolute',
+    top: 16,
+    right: 16,
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: '#f3f4f6',
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 1,
+  },
+  closeButtonText: {
+    fontSize: 16,
+    color: '#6b7280',
+    fontWeight: 'bold',
+  },
+  modalHeader: {
+    alignItems: 'center',
+    marginBottom: 24,
+    paddingRight: 32, // Account for close button
+  },
+  modalTitle: {
+    fontSize: 24,
+    fontWeight: 'bold',
+    color: '#1f2937',
+    marginBottom: 8,
+    textAlign: 'center',
+  },
+  modalSubtitle: {
+    fontSize: 14,
+    color: '#6b7280',
+    textAlign: 'center',
+    lineHeight: 20,
+  },
+  modalGoogleButton: {
+    marginBottom: 24,
+  },
+  modalFeatures: {
+    gap: 12,
+  },
+  modalFeatureItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  modalFeatureIcon: {
+    fontSize: 16,
+    marginRight: 12,
+    width: 20,
+  },
+  modalFeatureText: {
+    fontSize: 14,
+    color: '#6b7280',
   },
 });

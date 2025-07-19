@@ -1,4 +1,4 @@
-// components/BookingCreation.tsx - Enhanced booking creation with conflict handling
+// components/BookingCreation.tsx - Updated with notification integration
 import React, { useState, useEffect } from 'react';
 import {
   View,
@@ -14,6 +14,17 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../contexts/AuthContext';
 import apiService from '../services/api';
+
+// Try to import notification context
+let useNotifications: any;
+try {
+  useNotifications = require('../contexts/NotificationContext').useNotifications;
+} catch (error) {
+  console.log('NotificationContext not available, using fallback');
+  useNotifications = () => ({ 
+    refreshNotifications: async () => console.log('Notifications not available') 
+  });
+}
 
 interface TimeSlot {
   time: string;
@@ -38,6 +49,11 @@ interface ZoneAvailability {
 
 export default function BookingCreation() {
   const { user, isLoggedIn } = useAuth();
+  
+  // Add notification context
+  const notificationData = useNotifications();
+  const { refreshNotifications } = notificationData || { refreshNotifications: async () => {} };
+  
   const { zoneId, zoneName, pricePerHour } = useLocalSearchParams<{
     zoneId: string;
     zoneName: string;
@@ -52,6 +68,8 @@ export default function BookingCreation() {
   const [loading, setLoading] = useState(false);
   const [loadingAvailability, setLoadingAvailability] = useState(false);
   const [timeSlots, setTimeSlots] = useState<TimeSlot[]>([]);
+  const [bookingCreated, setBookingCreated] = useState(false);
+  const [createdBookingId, setCreatedBookingId] = useState<string | null>(null);
 
   useEffect(() => {
     // Set default date to tomorrow
@@ -162,17 +180,29 @@ export default function BookingCreation() {
       
       console.log('✅ Booking created successfully:', response);
       
+      // Set booking created state
+      setBookingCreated(true);
+      setCreatedBookingId(response.booking.id);
+      
+      // Refresh notifications to show the new booking notification
+      try {
+        await refreshNotifications();
+        console.log('✅ Notifications refreshed after booking creation');
+      } catch (notifError) {
+        console.warn('⚠️ Failed to refresh notifications:', notifError);
+      }
+      
       Alert.alert(
-        'Booking Confirmed!',
-        `Your booking has been confirmed.\n\nReference: ${response.booking.reference}\nTotal: $${response.booking.totalAmount}`,
+        'Booking Created! 🎉',
+        'Your booking request has been sent to the vendor. You\'ll receive a notification when they respond.',
         [
           {
-            text: 'View Bookings',
-            onPress: () => router.push('/(tabs)/bookings')
+            text: 'View Notifications',
+            onPress: () => router.push('/notifications')
           },
           {
-            text: 'OK',
-            onPress: () => router.back()
+            text: 'Continue',
+            onPress: () => router.push('/(tabs)')
           }
         ]
       );
@@ -234,481 +264,49 @@ export default function BookingCreation() {
     return maxDate.toISOString().split('T')[0];
   };
 
-  if (!isLoggedIn) {
+  // Success screen component
+  if (bookingCreated) {
     return (
       <View style={styles.container}>
         <View style={styles.header}>
-          <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
+          <TouchableOpacity style={styles.backButton} onPress={() => router.push('/(tabs)')}>
             <Ionicons name="arrow-back" size={24} color="#6366f1" />
           </TouchableOpacity>
-          <Text style={styles.headerTitle}>Book Gaming Session</Text>
+          <Text style={styles.headerTitle}>Booking Created</Text>
         </View>
         
-        <View style={styles.loginPrompt}>
-          <Ionicons name="lock-closed" size={64} color="#9ca3af" />
-          <Text style={styles.loginTitle}>Login Required</Text>
-          <Text style={styles.loginSubtitle}>
-            Please login to create a booking at {zoneName}
+        <View style={styles.successContainer}>
+          <Ionicons name="checkmark-circle" size={80} color="#4CAF50" />
+          <Text style={styles.successTitle}>Booking Created Successfully!</Text>
+          <Text style={styles.successMessage}>
+            Your booking request has been sent to the vendor. You'll receive a notification when they respond.
           </Text>
-          <TouchableOpacity
-            style={styles.loginButton}
-            onPress={() => router.push('/login')}
-          >
-            <Text style={styles.loginButtonText}>Login</Text>
-          </TouchableOpacity>
+          
+          <View style={styles.actionButtons}>
+            <TouchableOpacity 
+              style={[styles.button, styles.primaryButton]}
+              onPress={() => router.push('/notifications')}
+            >
+              <Ionicons name="notifications" size={20} color="white" />
+              <Text style={styles.buttonText}>Check Notifications</Text>
+            </TouchableOpacity>
+            
+            <TouchableOpacity 
+              style={[styles.button, styles.secondaryButton]}
+              onPress={() => router.push('/(tabs)/bookings')}
+            >
+              <Ionicons name="calendar" size={20} color="#007AFF" />
+              <Text style={[styles.buttonText, { color: '#007AFF' }]}>View Bookings</Text>
+            </TouchableOpacity>
+            
+            <TouchableOpacity 
+              style={[styles.button, styles.tertiaryButton]}
+              onPress={() => router.push('/(tabs)')}
+            >
+              <Text style={[styles.buttonText, { color: '#666' }]}>Back to Dashboard</Text>
+            </TouchableOpacity>
+          </View>
         </View>
       </View>
     );
   }
-
-  return (
-    <View style={styles.container}>
-      <View style={styles.header}>
-        <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
-          <Ionicons name="arrow-back" size={24} color="#6366f1" />
-        </TouchableOpacity>
-        <Text style={styles.headerTitle}>Book Gaming Session</Text>
-      </View>
-
-      <ScrollView style={styles.content}>
-        <View style={styles.zoneInfo}>
-          <Text style={styles.zoneName}>{zoneName}</Text>
-          <Text style={styles.zonePrice}>${pricePerHour}/hour</Text>
-        </View>
-
-        {/* Date Selection */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Select Date</Text>
-          <TouchableOpacity style={styles.dateButton}>
-            <Ionicons name="calendar" size={20} color="#6366f1" />
-            <Text style={styles.dateButtonText}>
-              {selectedDate ? new Date(selectedDate).toLocaleDateString() : 'Select Date'}
-            </Text>
-          </TouchableOpacity>
-          <Text style={styles.helperText}>
-            You can book up to 30 days in advance
-          </Text>
-        </View>
-
-        {/* Duration Selection */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Duration</Text>
-          <View style={styles.durationContainer}>
-            {[1, 2, 3, 4, 6, 8].map(hours => (
-              <TouchableOpacity
-                key={hours}
-                style={[
-                  styles.durationButton,
-                  duration === hours && styles.selectedDurationButton
-                ]}
-                onPress={() => setDuration(hours)}
-              >
-                <Text style={[
-                  styles.durationButtonText,
-                  duration === hours && styles.selectedDurationButtonText
-                ]}>
-                  {hours}h
-                </Text>
-              </TouchableOpacity>
-            ))}
-          </View>
-        </View>
-
-        {/* Time Slot Selection */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>
-            Available Time Slots
-            {loadingAvailability && (
-              <ActivityIndicator size="small" color="#6366f1" style={styles.loadingIndicator} />
-            )}
-          </Text>
-          
-          {availability && (
-            <View style={styles.availabilityInfo}>
-              <Text style={styles.availabilityText}>
-                {availability.totalAvailable} available, {availability.totalBooked} booked
-              </Text>
-              <Text style={styles.operatingHours}>
-                Open: {formatTimeSlot(availability.operatingHours.start)} - {formatTimeSlot(availability.operatingHours.end)}
-              </Text>
-            </View>
-          )}
-
-          <View style={styles.timeSlotsContainer}>
-            {timeSlots.map(slot => (
-              <TouchableOpacity
-                key={slot.time}
-                style={[
-                  styles.timeSlotButton,
-                  !slot.available && styles.unavailableTimeSlot,
-                  selectedTimeSlot === slot.time && styles.selectedTimeSlot
-                ]}
-                onPress={() => slot.available && setSelectedTimeSlot(slot.time)}
-                disabled={!slot.available}
-              >
-                <Text style={[
-                  styles.timeSlotText,
-                  !slot.available && styles.unavailableTimeSlotText,
-                  selectedTimeSlot === slot.time && styles.selectedTimeSlotText
-                ]}>
-                  {formatTimeSlot(slot.time)}
-                </Text>
-                {!slot.available && (
-                  <Ionicons name="close-circle" size={16} color="#ef4444" />
-                )}
-              </TouchableOpacity>
-            ))}
-          </View>
-
-          {loadingAvailability && (
-            <View style={styles.loadingContainer}>
-              <ActivityIndicator size="large" color="#6366f1" />
-              <Text style={styles.loadingText}>Loading availability...</Text>
-            </View>
-          )}
-        </View>
-
-        {/* Notes Section */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Notes (Optional)</Text>
-          <TextInput
-            style={styles.notesInput}
-            placeholder="Any special requests or notes..."
-            value={notes}
-            onChangeText={setNotes}
-            multiline
-            numberOfLines={3}
-            maxLength={500}
-          />
-          <Text style={styles.characterCount}>{notes.length}/500</Text>
-        </View>
-
-        {/* Booking Summary */}
-        <View style={styles.summarySection}>
-          <Text style={styles.summaryTitle}>Booking Summary</Text>
-          <View style={styles.summaryRow}>
-            <Text style={styles.summaryLabel}>Date:</Text>
-            <Text style={styles.summaryValue}>
-              {selectedDate ? new Date(selectedDate).toLocaleDateString() : 'Not selected'}
-            </Text>
-          </View>
-          <View style={styles.summaryRow}>
-            <Text style={styles.summaryLabel}>Time:</Text>
-            <Text style={styles.summaryValue}>
-              {selectedTimeSlot ? formatTimeSlot(selectedTimeSlot) : 'Not selected'}
-            </Text>
-          </View>
-          <View style={styles.summaryRow}>
-            <Text style={styles.summaryLabel}>Duration:</Text>
-            <Text style={styles.summaryValue}>{duration} hour{duration > 1 ? 's' : ''}</Text>
-          </View>
-          <View style={styles.summaryRow}>
-            <Text style={styles.summaryLabel}>Rate:</Text>
-            <Text style={styles.summaryValue}>${pricePerHour}/hour</Text>
-          </View>
-          <View style={[styles.summaryRow, styles.totalRow]}>
-            <Text style={styles.totalLabel}>Total:</Text>
-            <Text style={styles.totalValue}>${calculateTotal()}</Text>
-          </View>
-        </View>
-      </ScrollView>
-
-      {/* Book Now Button */}
-      <View style={styles.bookingButtonContainer}>
-        <TouchableOpacity
-          style={[
-            styles.bookingButton,
-            (!selectedDate || !selectedTimeSlot || loading) && styles.disabledButton
-          ]}
-          onPress={handleCreateBooking}
-          disabled={!selectedDate || !selectedTimeSlot || loading}
-        >
-          {loading ? (
-            <ActivityIndicator color="white" size="small" />
-          ) : (
-            <>
-              <Text style={styles.bookingButtonText}>Book Now</Text>
-              <Text style={styles.bookingButtonPrice}>${calculateTotal()}</Text>
-            </>
-          )}
-        </TouchableOpacity>
-      </View>
-    </View>
-  );
-}
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#f8fafc',
-  },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingTop: 50,
-    paddingHorizontal: 20,
-    paddingBottom: 20,
-    backgroundColor: 'white',
-    borderBottomWidth: 1,
-    borderBottomColor: '#e5e7eb',
-  },
-  backButton: {
-    marginRight: 15,
-  },
-  headerTitle: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: '#1f2937',
-  },
-  content: {
-    flex: 1,
-    padding: 20,
-  },
-  zoneInfo: {
-    backgroundColor: 'white',
-    padding: 20,
-    borderRadius: 12,
-    marginBottom: 20,
-    alignItems: 'center',
-  },
-  zoneName: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: '#1f2937',
-    marginBottom: 8,
-  },
-  zonePrice: {
-    fontSize: 18,
-    color: '#6366f1',
-    fontWeight: '600',
-  },
-  section: {
-    marginBottom: 24,
-  },
-  sectionTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#1f2937',
-    marginBottom: 12,
-  },
-  dateButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: 'white',
-    padding: 16,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: '#e5e7eb',
-  },
-  dateButtonText: {
-    marginLeft: 12,
-    fontSize: 16,
-    color: '#1f2937',
-  },
-  helperText: {
-    fontSize: 12,
-    color: '#6b7280',
-    marginTop: 8,
-  },
-  durationContainer: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 12,
-  },
-  durationButton: {
-    backgroundColor: 'white',
-    paddingHorizontal: 20,
-    paddingVertical: 12,
-    borderRadius: 20,
-    borderWidth: 1,
-    borderColor: '#e5e7eb',
-  },
-  selectedDurationButton: {
-    backgroundColor: '#6366f1',
-    borderColor: '#6366f1',
-  },
-  durationButtonText: {
-    fontSize: 16,
-    color: '#1f2937',
-    fontWeight: '500',
-  },
-  selectedDurationButtonText: {
-    color: 'white',
-  },
-  availabilityInfo: {
-    backgroundColor: '#f0f9ff',
-    padding: 12,
-    borderRadius: 8,
-    marginBottom: 12,
-  },
-  availabilityText: {
-    fontSize: 14,
-    color: '#0369a1',
-    fontWeight: '500',
-  },
-  operatingHours: {
-    fontSize: 12,
-    color: '#0369a1',
-    marginTop: 4,
-  },
-  timeSlotsContainer: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 12,
-  },
-  timeSlotButton: {
-    backgroundColor: 'white',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: '#e5e7eb',
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  selectedTimeSlot: {
-    backgroundColor: '#6366f1',
-    borderColor: '#6366f1',
-  },
-  unavailableTimeSlot: {
-    backgroundColor: '#f3f4f6',
-    borderColor: '#d1d5db',
-  },
-  timeSlotText: {
-    fontSize: 14,
-    color: '#1f2937',
-    fontWeight: '500',
-  },
-  selectedTimeSlotText: {
-    color: 'white',
-  },
-  unavailableTimeSlotText: {
-    color: '#6b7280',
-  },
-  loadingIndicator: {
-    marginLeft: 8,
-  },
-  loadingContainer: {
-    alignItems: 'center',
-    padding: 20,
-  },
-  loadingText: {
-    marginTop: 8,
-    fontSize: 14,
-    color: '#6366f1',
-  },
-  notesInput: {
-    backgroundColor: 'white',
-    padding: 16,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: '#e5e7eb',
-    fontSize: 16,
-    textAlignVertical: 'top',
-  },
-  characterCount: {
-    fontSize: 12,
-    color: '#6b7280',
-    textAlign: 'right',
-    marginTop: 4,
-  },
-  summarySection: {
-    backgroundColor: 'white',
-    padding: 20,
-    borderRadius: 12,
-    marginBottom: 20,
-  },
-  summaryTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#1f2937',
-    marginBottom: 16,
-  },
-  summaryRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginBottom: 12,
-  },
-  summaryLabel: {
-    fontSize: 14,
-    color: '#6b7280',
-  },
-  summaryValue: {
-    fontSize: 14,
-    color: '#1f2937',
-    fontWeight: '500',
-  },
-  totalRow: {
-    borderTopWidth: 1,
-    borderTopColor: '#e5e7eb',
-    paddingTop: 12,
-    marginTop: 8,
-  },
-  totalLabel: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    color: '#1f2937',
-  },
-  totalValue: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    color: '#6366f1',
-  },
-  bookingButtonContainer: {
-    padding: 20,
-    backgroundColor: 'white',
-    borderTopWidth: 1,
-    borderTopColor: '#e5e7eb',
-  },
-  bookingButton: {
-    backgroundColor: '#6366f1',
-    paddingVertical: 16,
-    borderRadius: 12,
-    alignItems: 'center',
-  },
-  disabledButton: {
-    backgroundColor: '#9ca3af',
-  },
-  bookingButtonText: {
-    color: 'white',
-    fontSize: 18,
-    fontWeight: 'bold',
-  },
-  bookingButtonPrice: {
-    color: 'white',
-    fontSize: 14,
-    opacity: 0.9,
-    marginTop: 2,
-  },
-  loginPrompt: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: 40,
-  },
-  loginTitle: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: '#1f2937',
-    marginTop: 20,
-    marginBottom: 12,
-  },
-  loginSubtitle: {
-    fontSize: 16,
-    color: '#6b7280',
-    textAlign: 'center',
-    marginBottom: 30,
-  },
-  loginButton: {
-    backgroundColor: '#6366f1',
-    paddingHorizontal: 32,
-    paddingVertical: 12,
-    borderRadius: 25,
-  },
-  loginButtonText: {
-    color: 'white',
-    fontSize: 16,
-    fontWeight: '600',
-  },
-});

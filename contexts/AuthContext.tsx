@@ -1,4 +1,4 @@
-// contexts/AuthContext.tsx - Debug version with better logging
+// contexts/AuthContext.tsx - Debug version with better logging and notification integration
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import apiService from '../services/api';
@@ -87,6 +87,17 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         setUser(userData);
         setIsLoggedIn(true);
         
+        // 🔔 Initialize notification service for authenticated users
+        try {
+          console.log('🔔 Initializing notification service...');
+          const NotificationService = (await import('../services/NotificationService')).default;
+          await NotificationService.initialize();
+          console.log('✅ Notification service initialized');
+        } catch (notificationError) {
+          console.error('⚠️ Notification service initialization failed:', notificationError);
+          // Don't fail auth if notifications fail
+        }
+        
         // Optional: Try to validate with server (but don't fail if it doesn't work)
         try {
           console.log('🔍 Validating token with server...');
@@ -132,6 +143,17 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       // Update state
       setUser(userData);
       setIsLoggedIn(true);
+      
+      // 🔔 Initialize notification service after login
+      try {
+        console.log('🔔 Initializing notification service after login...');
+        const NotificationService = (await import('../services/NotificationService')).default;
+        await NotificationService.initialize();
+        console.log('✅ Notification service initialized after login');
+      } catch (notificationError) {
+        console.error('⚠️ Notification service initialization failed after login:', notificationError);
+        // Don't fail login if notifications fail
+      }
       
       console.log('✅ User logged in successfully');
     } catch (error) {

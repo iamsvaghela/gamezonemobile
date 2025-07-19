@@ -275,7 +275,7 @@ export default function GoogleLoginButton({
   const authenticateWithBackend = async (googleUser: GoogleUser) => {
     try {
       console.log('🚀 Authenticating with backend...');
-
+      
       // Health check
       try {
         await apiService.healthCheck();
@@ -294,6 +294,9 @@ export default function GoogleLoginButton({
         role: role,
         isVerified: googleUser.verified_email || true,
       });
+
+      console.log('🔍 Backend response:', JSON.stringify(response, null, 2));
+      console.log('🔍 User role from backend:', response.user?.role);
 
       if (response.success) {
         console.log('✅ Backend authentication successful!');

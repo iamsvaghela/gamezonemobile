@@ -1,11 +1,21 @@
-// app/(tabs)/_layout.tsx - Updated tabs layout
+// app/(tabs)/_layout.tsx - Fixed tabs layout
 import React from 'react';
 import { Tabs } from 'expo-router';
 import { useAuth } from '../../contexts/AuthContext';
-import { View, Text, StyleSheet } from 'react-native';
+import { View, Text, ActivityIndicator } from 'react-native';
 
 export default function TabsLayout() {
-  const { isLoggedIn } = useAuth();
+  const { isLoggedIn, isLoading } = useAuth();
+
+  // Show loading indicator while checking auth
+  if (isLoading) {
+    return (
+      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
+        <ActivityIndicator size="large" color="#6366f1" />
+        <Text style={{ marginTop: 10 }}>Loading...</Text>
+      </View>
+    );
+  }
 
   return (
     <Tabs
@@ -44,19 +54,19 @@ export default function TabsLayout() {
         }}
       />
       
-      {isLoggedIn && (
-        <Tabs.Screen
-          name="bookings"
-          options={{
-            title: 'Bookings',
-            tabBarIcon: ({ focused, color }) => (
-              <Text style={{ fontSize: 20, color }}>
-                {focused ? '📅' : '📅'}
-              </Text>
-            ),
-          }}
-        />
-      )}
+      <Tabs.Screen
+        name="bookings"
+        options={{
+          title: 'Bookings',
+          tabBarIcon: ({ focused, color }) => (
+            <Text style={{ fontSize: 20, color }}>
+              {focused ? '📅' : '📅'}
+            </Text>
+          ),
+          // Hide the tab if user is not logged in
+          href: isLoggedIn ? '/bookings' : null,
+        }}
+      />
       
       <Tabs.Screen
         name="profile"

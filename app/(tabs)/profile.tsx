@@ -1,4 +1,4 @@
-// app/(tabs)/profile.tsx - Simplified Profile Screen
+// app/(tabs)/profile.tsx - Updated with login redirect
 import React, { useState, useEffect } from 'react';
 import {
   View,
@@ -16,6 +16,7 @@ import {
 } from 'react-native';
 import { router } from 'expo-router';
 import { useAuth } from '../../contexts/AuthContext';
+import GoogleLoginButton from '../../components/GoogleLoginButton';
 import apiService from '../../services/api';
 
 export default function ProfileScreen() {
@@ -23,30 +24,34 @@ export default function ProfileScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [loggingOut, setLoggingOut] = useState(false);
 
-  const handleGoogleLogin = async () => {
+  const handleGoogleLogin = async (userData: any, token: string, isNewUser: boolean) => {
+    console.log('✅ Google login successful in profile:', userData.email);
+    
     try {
-      const demoUser = {
-        _id: '1',
-        name: 'Demo User',
-        email: 'demo@example.com',
-        role: 'user',
-        phone: '+1234567890',
-        profileImage: '',
-        isVerified: true,
-        createdAt: new Date().toISOString(),
-      };
+      // Use auth context to login
+      await login(userData, token);
       
-      await login(demoUser, 'demo_token_123');
-      
+      // Show success message
       Alert.alert(
         'Login Successful!',
-        'Welcome to GameZone! You are now logged in as Demo User.',
+        isNewUser ? 
+          `Welcome to GameZone, ${userData.name}!` :
+          `Welcome back, ${userData.name}!`,
         [{ text: 'Continue', onPress: () => {} }]
       );
     } catch (error) {
-      console.error('Demo login error:', error);
-      Alert.alert('Error', 'Failed to login. Please try again.');
+      console.error('Login error in profile:', error);
+      Alert.alert('Error', 'Login succeeded but failed to complete setup. Please try again.');
     }
+  };
+
+  const handleGoogleLoginError = (error: string) => {
+    console.error('❌ Google login error in profile:', error);
+    Alert.alert(
+      'Login Failed',
+      `Authentication failed: ${error}`,
+      [{ text: 'Try Again', onPress: () => {} }]
+    );
   };
 
   const handleLogout = () => {
@@ -77,8 +82,6 @@ export default function ProfileScreen() {
       setLoggingOut(true);
       console.log('🚪 Starting logout process...');
       
-      // Close any open modals
-      
       console.log('🧹 Local state cleared');
       
       // Perform logout through AuthContext
@@ -107,11 +110,6 @@ export default function ProfileScreen() {
       // Even if logout fails, clear local state and navigate
       try {
         console.log('🔄 Force logout - clearing state anyway');
-        
-        // Clear forms
-        setEditedName('');
-        setEditedPhone('');
-        setEditProfileModal(false);
         
         // Navigate to home
         router.replace('/(tabs)');
@@ -189,22 +187,15 @@ export default function ProfileScreen() {
           </View>
           <Text style={styles.loginTitle}>Welcome to GameZone!</Text>
           <Text style={styles.loginSubtitle}>
-            Sign in to access your profile, book gaming zones, and manage your reservations.
+            Sign in with Google to access your profile and book gaming zones.
           </Text>
           
-          <TouchableOpacity 
-            style={styles.googleLoginButton} 
-            onPress={handleGoogleLogin}
-          >
-            <Text style={styles.googleLoginButtonText}>📧 Continue with Google</Text>
-          </TouchableOpacity>
-          
-          <TouchableOpacity 
-            style={styles.emailLoginButton} 
-            onPress={() => router.push('/login')}
-          >
-            <Text style={styles.emailLoginButtonText}>📧 Sign in with Email</Text>
-          </TouchableOpacity>
+          <GoogleLoginButton
+            onSuccess={handleGoogleLogin}
+            onError={handleGoogleLoginError}
+            role="user"
+            style={styles.googleLoginButton}
+          />
           
           <View style={styles.features}>
             <View style={styles.featureItem}>
@@ -464,7 +455,7 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     paddingVertical: 16,
     paddingHorizontal: 32,
-    marginBottom: 12,
+    marginBottom: 24,
     minWidth: 250,
     borderWidth: 1,
     borderColor: '#d1d5db',
@@ -473,26 +464,6 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
     shadowRadius: 4,
-  },
-  googleLoginButtonText: {
-    color: '#374151',
-    fontSize: 16,
-    fontWeight: '500',
-    textAlign: 'center',
-  },
-  emailLoginButton: {
-    backgroundColor: '#6366f1',
-    borderRadius: 12,
-    paddingVertical: 16,
-    paddingHorizontal: 32,
-    marginBottom: 24,
-    minWidth: 250,
-  },
-  emailLoginButtonText: {
-    color: '#ffffff',
-    fontSize: 16,
-    fontWeight: '500',
-    textAlign: 'center',
   },
   features: {
     alignSelf: 'stretch',

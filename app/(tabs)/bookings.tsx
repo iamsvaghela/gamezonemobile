@@ -1,4 +1,4 @@
-// app/(tabs)/bookings.tsx - Updated with real API integration
+// app/(tabs)/bookings.tsx - Updated with login redirect
 import React, { useState, useEffect } from 'react';
 import {
   View,
@@ -13,6 +13,7 @@ import {
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../../contexts/AuthContext';
+import GoogleLoginButton from '../../components/GoogleLoginButton';
 import apiService from '../../services/api';
 
 // Updated interface to match your API response
@@ -45,13 +46,43 @@ interface Booking {
 type FilterStatus = 'all' | 'upcoming' | 'completed' | 'cancelled';
 
 export default function BookingsScreen() {
-  const { user, isLoggedIn } = useAuth();
+  const { user, isLoggedIn, login } = useAuth();
   const [bookings, setBookings] = useState<Booking[]>([]);
   const [filteredBookings, setFilteredBookings] = useState<Booking[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [filterStatus, setFilterStatus] = useState<FilterStatus>('all');
   const [error, setError] = useState<string | null>(null);
+
+  const handleGoogleLogin = async (userData: any, token: string, isNewUser: boolean) => {
+    console.log('✅ Google login successful in bookings:', userData.email);
+    
+    try {
+      // Use auth context to login
+      await login(userData, token);
+      
+      // Show success message
+      Alert.alert(
+        'Login Successful!',
+        isNewUser ? 
+          `Welcome to GameZone, ${userData.name}!` :
+          `Welcome back, ${userData.name}!`,
+        [{ text: 'Continue', onPress: () => {} }]
+      );
+    } catch (error) {
+      console.error('Login error in bookings:', error);
+      Alert.alert('Error', 'Login succeeded but failed to complete setup. Please try again.');
+    }
+  };
+
+  const handleGoogleLoginError = (error: string) => {
+    console.error('❌ Google login error in bookings:', error);
+    Alert.alert(
+      'Login Failed',
+      `Authentication failed: ${error}`,
+      [{ text: 'Try Again', onPress: () => {} }]
+    );
+  };
 
   useEffect(() => {
     if (isLoggedIn) {
@@ -134,7 +165,8 @@ export default function BookingsScreen() {
   };
 
   const handleLogin = () => {
-    router.push('/login');
+    // This is no longer needed, but keeping for compatibility
+    console.log('Login handled by GoogleLoginButton');
   };
 
   const handleBookingPress = (booking: Booking) => {
@@ -339,14 +371,35 @@ export default function BookingsScreen() {
         
         <View style={styles.notAuthenticatedContainer}>
           <View style={styles.loginPrompt}>
-            <Ionicons name="calendar-outline" size={80} color="#9ca3af" />
-            <Text style={styles.loginTitle}>Sign In Required</Text>
+            <View style={styles.loginIcon}>
+              <Text style={styles.loginIconText}>🎮</Text>
+            </View>
+            <Text style={styles.loginTitle}>Welcome to GameZone!</Text>
             <Text style={styles.loginSubtitle}>
-              Sign in to view your booking history and manage your reservations
+              Sign in with Google to access your profile and book gaming zones.
             </Text>
-            <TouchableOpacity style={styles.loginButton} onPress={handleLogin}>
-              <Text style={styles.loginButtonText}>Sign In</Text>
-            </TouchableOpacity>
+            
+            <GoogleLoginButton
+              onSuccess={handleGoogleLogin}
+              onError={handleGoogleLoginError}
+              role="user"
+              style={styles.googleLoginButton}
+            />
+            
+            <View style={styles.features}>
+              <View style={styles.featureItem}>
+                <Text style={styles.featureIcon}>✅</Text>
+                <Text style={styles.featureText}>Quick and secure login</Text>
+              </View>
+              <View style={styles.featureItem}>
+                <Text style={styles.featureIcon}>📅</Text>
+                <Text style={styles.featureText}>Book gaming zones</Text>
+              </View>
+              <View style={styles.featureItem}>
+                <Text style={styles.featureIcon}>🎯</Text>
+                <Text style={styles.featureText}>Track your reservations</Text>
+              </View>
+            </View>
           </View>
         </View>
       </View>
@@ -418,7 +471,7 @@ export default function BookingsScreen() {
             {filterStatus === 'all' && (
               <TouchableOpacity 
                 style={styles.browseButton}
-                onPress={() => router.push('/(tabs)/gamezones')}
+                onPress={() => router.push('/(tabs)/gamezone')}
               >
                 <Text style={styles.browseButtonText}>Browse Gaming Zones</Text>
               </TouchableOpacity>
@@ -481,29 +534,64 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.1,
     shadowRadius: 4,
   },
+  loginIcon: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    backgroundColor: '#f0f9ff',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 24,
+  },
+  loginIconText: {
+    fontSize: 40,
+  },
   loginTitle: {
     fontSize: 24,
     fontWeight: 'bold',
     color: '#1f2937',
-    marginTop: 16,
     marginBottom: 8,
+    textAlign: 'center',
   },
   loginSubtitle: {
     fontSize: 16,
     color: '#64748b',
     textAlign: 'center',
     marginBottom: 24,
+    lineHeight: 24,
   },
-  loginButton: {
-    backgroundColor: '#6366f1',
+  googleLoginButton: {
+    backgroundColor: '#ffffff',
+    borderRadius: 12,
+    paddingVertical: 16,
     paddingHorizontal: 32,
-    paddingVertical: 12,
-    borderRadius: 25,
+    marginBottom: 24,
+    minWidth: 250,
+    borderWidth: 1,
+    borderColor: '#d1d5db',
+    elevation: 2,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
   },
-  loginButtonText: {
-    color: 'white',
+  features: {
+    alignSelf: 'stretch',
+    maxWidth: 300,
+  },
+  featureItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  featureIcon: {
     fontSize: 16,
-    fontWeight: '600',
+    marginRight: 12,
+    width: 20,
+  },
+  featureText: {
+    fontSize: 14,
+    color: '#6b7280',
   },
   filterContainer: {
     flexDirection: 'row',

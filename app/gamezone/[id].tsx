@@ -1,4 +1,4 @@
-// app/gamezone/[id].tsx - Improved Zone Details with better styling and images
+// app/gamezone/[id].tsx - Fixed version with direct fetch
 import React, { useState, useEffect } from 'react';
 import {
   View,
@@ -14,7 +14,6 @@ import {
 } from 'react-native';
 import { useLocalSearchParams, router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import apiService from '../../services/api';
 
 const { width: screenWidth, height: screenHeight } = Dimensions.get('window');
 
@@ -81,14 +80,82 @@ export default function ZoneDetailsScreen() {
       
       console.log('🔍 Loading zone details for ID:', id);
       
-      if (!id || typeof id !== 'string' || !/^[0-9a-fA-F]{24}$/.test(id)) {
-        throw new Error('Invalid zone ID format');
+      if (!id || typeof id !== 'string') {
+        throw new Error('Invalid zone ID');
       }
       
-      const response = await apiService.getGameZone(id);
-      console.log('✅ Zone details loaded:', response);
+      // Use direct fetch since it works consistently
+      const response = await fetch(`https://gamezone-production.up.railway.app/api/gamezones/${id}`);
       
-      setZone(response);
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+      }
+      
+      const data = await response.json();
+      console.log('📱 Direct fetch response:', data);
+      
+      // Handle different response formats
+      let gameZone = null;
+      
+      if (data.gamezone) {
+        // Format: { success: true, gamezone: {...} }
+        gameZone = data.gamezone;
+      } else if (data._id) {
+        // Direct gamezone object
+        gameZone = data;
+      } else if (data.success && data.data) {
+        // Format: { success: true, data: {...} }
+        gameZone = data.data;
+      } else {
+        // Try to find the zone in any property
+        for (const key in data) {
+          if (data[key] && typeof data[key] === 'object' && data[key]._id) {
+            gameZone = data[key];
+            break;
+          }
+        }
+      }
+      
+      if (!gameZone) {
+        throw new Error('Zone not found in response');
+      }
+      
+      // Ensure required fields exist with proper defaults
+      const formattedZone: GameZone = {
+        _id: gameZone._id,
+        name: gameZone.name || 'Unknown Zone',
+        description: gameZone.description || '',
+        pricePerHour: gameZone.pricePerHour || 0,
+        rating: gameZone.rating || 0,
+        totalReviews: gameZone.totalReviews || 0,
+        images: gameZone.images || [],
+        location: {
+          address: gameZone.location?.address || '',
+          city: gameZone.location?.city || '',
+          state: gameZone.location?.state || '',
+          zipCode: gameZone.location?.zipCode || '',
+          coordinates: gameZone.location?.coordinates || { coordinates: [0, 0] }
+        },
+        operatingHours: {
+          start: gameZone.operatingHours?.start || '09:00',
+          end: gameZone.operatingHours?.end || '22:00'
+        },
+        capacity: gameZone.capacity || 1,
+        amenities: gameZone.amenities || [],
+        gameTypes: gameZone.gameTypes || [],
+        isActive: gameZone.isActive !== false,
+        vendorId: gameZone.vendorId || {
+          _id: 'unknown',
+          name: 'Unknown Vendor',
+          email: 'unknown@example.com'
+        },
+        equipment: gameZone.equipment,
+        createdAt: gameZone.createdAt || new Date().toISOString()
+      };
+      
+      setZone(formattedZone);
+      console.log('✅ Zone details loaded:', formattedZone.name);
+      
     } catch (error) {
       console.error('❌ Error loading zone details:', error);
       
@@ -116,12 +183,8 @@ export default function ZoneDetailsScreen() {
     if (!zone) return;
     
     router.push({
-      pathname: '/book-now',
-      params: {
-        zoneId: zone._id,
-        zoneName: zone.name,
-        pricePerHour: zone.pricePerHour.toString(),
-      }
+      pathname: '/booking/[id]',
+      params: { id: zone._id }
     });
   };
 
@@ -146,20 +209,24 @@ export default function ZoneDetailsScreen() {
   const handleDirections = () => {
     if (!zone) return;
     
-    const { coordinates } = zone.location.coordinates;
-    const [lng, lat] = coordinates;
-    
-    Alert.alert(
-      'Get Directions',
-      `Open maps to ${zone.location.address}?`,
-      [
-        { text: 'Cancel', style: 'cancel' },
-        { text: 'Open Maps', onPress: () => {
-          console.log(`Opening maps to: ${lat}, ${lng}`);
-          Alert.alert('Maps', `Opening directions to ${zone.location.address}`);
-        }}
-      ]
-    );
+    const coordinates = zone.location.coordinates?.coordinates;
+    if (coordinates && coordinates.length >= 2) {
+      const [lng, lat] = coordinates;
+      
+      Alert.alert(
+        'Get Directions',
+        `Open maps to ${zone.location.address}?`,
+        [
+          { text: 'Cancel', style: 'cancel' },
+          { text: 'Open Maps', onPress: () => {
+            console.log(`Opening maps to: ${lat}, ${lng}`);
+            Alert.alert('Maps', `Opening directions to ${zone.location.address}`);
+          }}
+        ]
+      );
+    } else {
+      Alert.alert('Maps', `Address: ${zone.location.address}, ${zone.location.city}, ${zone.location.state}`);
+    }
   };
 
   const formatOperatingHours = (start: string, end: string) => {
