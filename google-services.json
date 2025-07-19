@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "36495995726",
+    "project_id": "gamezone-app-50087",
+    "storage_bucket": "gamezone-app-50087.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:36495995726:android:d91ba94da28617e992241f",
+        "android_client_info": {
+          "package_name": "com.gamezone.app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDjrQlGLtScuUEwc9o3t3jazEU-k3UVRAY"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
